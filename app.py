@@ -4,7 +4,7 @@ import streamlit as st
 import plotly.express as px
 
 # ====== 配置 ======
-SPREADSHEET_ID = "替换成你的ID"
+SPREADSHEET_ID = "1s3JdFrzyfXMmJA7BRYK9xVsEASof_TxN3YMC8xbxW6E"
 SHEET_NAME = "Ledger_Clean"
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
 
