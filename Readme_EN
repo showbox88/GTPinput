@@ -1,0 +1,128 @@
+A lightweight, AI-first daily expense tracking system designed for speed, clarity, and long-term extensibility.
+
+---
+
+## ✨ Features
+
+- Natural language expense input via Custom GPT
+- Fast database writes (no Google Sheets / Make)
+- SQLite-based storage
+- Web dashboard for management and visualization
+- Local & cloud-friendly architecture
+
+---
+
+## 🧠 Architecture Overview
+
+Custom GPT
+↓ tool call
+Cloudflare Worker (API)
+↓
+SQLite Database
+↓
+Streamlit Dashboard
+
+
+Each layer is independent and replaceable.
+
+---
+
+## 🤖 Custom GPT Logic
+
+The GPT acts as a **Daily Expense Assistant**.
+
+### Trigger Rule
+
+If user input contains a monetary amount (e.g. `22`, `22块`, `$22`), the GPT **automatically records an expense**.
+
+### Tool Call Format
+
+```json
+{
+  "amount": 22,
+  "category": "Food",
+  "description": "Lunch takeout",
+  "date": "2026-02-03"
+}
+☁️ Cloudflare Worker
+Responsibilities
+API-only service
+
+Handles database operations
+
+No UI or AI logic
+
+Example Endpoints
+POST   /expense
+GET    /expenses?limit=200
+PUT    /expense/:id
+DELETE /expense/:id
+GET    /stats
+🗄️ Database Schema (SQLite)
+CREATE TABLE expenses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  amount REAL NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT,
+  date TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+Design goals:
+
+Flat schema
+
+Easy migration
+
+AI-friendly structure
+
+📊 Streamlit Dashboard
+Features
+Expense list (edit / delete)
+
+Category summary
+
+Trend chart
+
+Pie chart
+
+Data Source
+All data is fetched via the Worker API
+
+Default view loads latest 200 records
+
+🖥️ Local Development
+Requirements
+Python 3.9+
+
+Streamlit
+
+Run
+streamlit run streamlit_app.py
+(Optional) run.bat is provided for automatic environment setup on Windows.
+
+🔮 Future Extensions
+Budget system
+
+Monthly AI-generated reports
+
+CSV / Excel export
+
+Multi-user support
+
+Mobile app frontend
+
+🧾 Design Philosophy
+Data-first
+
+AI as interface, not logic holder
+
+Minimal coupling
+
+Easy handover to humans or AI
+
+📌 Notes for Contributors / AI
+Do not introduce hidden logic
+
+Preserve fast write performance
+
+Keep schema backward-compatible
