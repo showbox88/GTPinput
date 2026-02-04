@@ -281,7 +281,7 @@ async function parseWithOpenAI(env, text, refDate) {
 - amount 必须是数字金额。
 - 若出现“外套100”这种粘连写法：item="外套", amount=100。
 - 若出现“前天打车30”：item="打车", amount=30, date=前天日期。
-- category 必须在：餐饮/日用品/交通/服饰/医疗/娱乐/其他 里选一个（不确定就用 其他）。
+- category 必须在：餐饮/日用品/交通/服饰/医疗/娱乐/居住/其他 里选一个（不确定就用 其他）。
 - note 没有就填 null。
 输出必须严格符合 schema，且 items 数组中每条都必须包含：date,item,amount,category,note。
 `

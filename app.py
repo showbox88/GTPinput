@@ -10,7 +10,10 @@ import requests
 API_URL = st.secrets["general"]["API_URL"]
 API_KEY = st.secrets["general"]["API_KEY"]
 
-st.set_page_config(page_title="支出概览", layout="wide")
+# ====== Constants ======
+CATEGORIES = ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "居住", "其他"]
+
+
 
 # ====== 数据读取 ======
 @st.cache_data(ttl=30)  # 30秒缓存
@@ -280,7 +283,7 @@ with tab_dash:
             "日期": st.column_config.DateColumn("日期", format="YYYY-MM-DD", width="small"),
             "项目": st.column_config.TextColumn("项目", width="medium"),
             "金额": st.column_config.NumberColumn("金额", min_value=0, format="$%.2f", width="small"),
-            "分类": st.column_config.SelectboxColumn("分类", options=["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "其他"], width="small"),
+            "分类": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="small"),
             "备注": st.column_config.TextColumn("备注", width="medium")
         }
 
@@ -360,7 +363,7 @@ with tab_settings:
         with st.form("add_budget_form", clear_on_submit=True):
             c1, c2, c3 = st.columns(3)
             b_name = c1.text_input("预算名称", placeholder="例如：本月伙食")
-            b_cat = c2.selectbox("对应分类", options=["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "其他"])
+            b_cat = c2.selectbox("对应分类", options=CATEGORIES)
             b_amt = c3.number_input("预算金额", min_value=0.0, step=100.0, value=1000.0)
             
             c4, c5 = st.columns(2)
@@ -397,7 +400,7 @@ with tab_settings:
             r1, r2, r3 = st.columns(3)
             r_name = r1.text_input("名称", placeholder="例如：房租")
             r_amt = r2.number_input("金额", min_value=0.0, step=100.0, value=2000.0)
-            r_cat = r3.selectbox("分类", options=["居住", "餐饮", "日用品", "交通", "其他"]) # Manual '居住' might not strictly match but let's allow "其他" or expand list
+            r_cat = r3.selectbox("分类", options=CATEGORIES) # Manual '居住' might not strictly match but let's allow "其他" or expand list
             
             r4, r5 = st.columns(2)
             r_freq = r4.selectbox("频率", options=["weekly", "monthly", "yearly"])
@@ -438,7 +441,7 @@ with tab_settings:
                 "启用": st.column_config.CheckboxColumn("✅", width="small", default=True),
                 "name": st.column_config.TextColumn("名称", width="medium", required=True),
                 "amount": st.column_config.NumberColumn("金额", min_value=0.0, format="$%.2f", width="small", required=True),
-                "category": st.column_config.SelectboxColumn("分类", options=["居住", "餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "其他"], width="small", required=True),
+                "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="small", required=True),
                 "frequency": st.column_config.SelectboxColumn("频率", options=["weekly", "monthly", "yearly"], width="small", required=True),
                 "day": st.column_config.NumberColumn("日期/Day", width="small", min_value=1, max_value=366, required=True, help="Weekly:1-7; Monthly:1-31"),
                 "last_run_date": st.column_config.TextColumn("上次运行", disabled=True, width="medium"),
