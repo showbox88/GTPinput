@@ -359,32 +359,55 @@ with tab_settings:
     with st.expander("💰 预算管理 (Budget Plans)", expanded=True):
         st.caption("设置每个分类的月度预算，将在首页展示进度条。")
         
-        # Add New Budget Form
-        with st.form("add_budget_form", clear_on_submit=True):
-            c1, c2, c3 = st.columns(3)
-            b_name = c1.text_input("预算名称", placeholder="例如：本月伙食")
-            b_cat = c2.selectbox("对应分类", options=CATEGORIES)
-            b_amt = c3.number_input("预算金额", min_value=0.0, step=100.0, value=1000.0)
-            
-            # 常用 EMOJI 列表
-            EMOJI_OPTIONS = [
-                "💰", "🍔", "🍜", "🍱", "🍷", "☕", "🍰", "🍎",  # 餐饮
-                "🚗", "🚕", "🚇", "✈️", "⛽", "🚲",              # 交通
-                "🏠", "💡", "💧", "🔌", "🛋️",                   # 居住/水电
-                "🛒", "🛍️", "👕", "👠", "📱", "💻",              # 购物
-                "🍿", "🎮", "🎵", "🎨", "🎟️", "🎢",              # 娱乐
-                "💊", "🏥", "🏋️", "🧘", "💇",                   # 医疗/健康
-                "🎁", "📚", "🎓", "👶", "🐶", "🔧"               # 其他
-            ]
-            
-            c4, c5 = st.columns(2)
-            b_color = c4.color_picker("进度条颜色", "#FF4B4B")
-            # b_icon = c5.text_input("图标 (Emoji)", value="🍔")
-            b_icon = c5.selectbox("选择图标", options=EMOJI_OPTIONS, index=1)
-            
-            if st.form_submit_button("➕ 添加预算计划"):
-                if add_budget(b_name, b_cat, b_amt, b_color, b_icon):
+        # Add New Budget (Refactored to Non-Form for Interactive Grid)
+        if "new_budget_icon" not in st.session_state:
+            st.session_state["new_budget_icon"] = "💰"
+
+        c1, c2, c3 = st.columns(3)
+        b_name = c1.text_input("预算名称", placeholder="例如：本月伙食", key="nb_name")
+        b_cat = c2.selectbox("对应分类", options=CATEGORIES, key="nb_cat")
+        b_amt = c3.number_input("预算金额", min_value=0.0, step=100.0, value=1000.0, key="nb_amt")
+        
+        c4, c5 = st.columns([1, 2])
+        b_color = c4.color_picker("进度条颜色", "#FF4B4B", key="nb_color")
+        
+        with c5:
+            st.markdown(f"**当前选择图标:** {st.session_state['new_budget_icon']}")
+
+        # Icon Grid picker
+        st.caption("选择图标 (点击选中):")
+        EMOJI_OPTIONS = [
+            "💰", "🍔", "🍜", "🍱", "🍷", "☕", "🍰", "🍎", "🥓", "🍳",  # 10
+            "🚗", "🚕", "🚇", "✈️", "⛽", "🚲", "🏠", "💡", "💧", "🔌",  # 20
+            "🛒", "🛍️", "👕", "👠", "📱", "💻", "🕶️", "💍", "💄", "🧴",  # 30
+            "🍿", "🎮", "🎵", "🎨", "🎟️", "💊", "🏥", "🏋️", "👶", "🎁"   # 40
+        ]
+        
+        # 10 cols grid
+        cols = st.columns(10)
+        for i, icon in enumerate(EMOJI_OPTIONS):
+            with cols[i % 10]:
+                # If selected, outline/primary, else secondary/ghost? 
+                # Streamlit button styles are limited. primary = filled, secondary = outline/default.
+                btn_type = "primary" if st.session_state["new_budget_icon"] == icon else "secondary"
+                if st.button(icon, key=f"btn_icon_{i}", type=btn_type, use_container_width=True):
+                    st.session_state["new_budget_icon"] = icon
+                    st.rerun()
+
+        st.divider()
+
+        if st.button("➕ 添加预算计划", type="primary", use_container_width=True):
+            if not b_name:
+                st.error("请输入预算名称")
+            else:
+                if add_budget(b_name, b_cat, b_amt, b_color, st.session_state["new_budget_icon"]):
                     st.success("添加成功！")
+                    # Reset basic fields manually if needed, or rely on rerun clearing
+                    # But session state text inputs persist unless cleared.
+                    # We can clear by setting keys in session state?
+                    # Using key=... allows us to clear them:
+                    # st.session_state["nb_name"] = "" ...
+                    time.sleep(0.5)
                     st.rerun()
 
         # List Existing Budgets
