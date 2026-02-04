@@ -1,0 +1,36 @@
+# Task: Implement Budget System
+
+- [ ] Planning & Design <!-- id: 0 -->
+    - [x] Draft Implementation Plan <!-- id: 1 -->
+    - [ ] User Review & Approval <!-- id: 2 -->
+- [x] Backend (Cloudflare Worker + D1) <!-- id: 3 -->
+    - [x] Create `budgets` table <!-- id: 4 -->
+    - [x] Create `recurring_rules` table <!-- id: 27 -->
+    - [x] Implement Budget Endpoints (`/budget/*`) <!-- id: 5 -->
+    - [x] Implement Recurring Endpoints (`/recurring/*`) <!-- id: 28 -->
+    - [x] Implement `scheduled` Cron Handler <!-- id: 29 -->
+    - [x] Deploy Worker <!-- id: 8 -->
+- [x] Frontend (Streamlit) <!-- id: 9 -->
+    - [x] Add "Budget Management" UI <!-- id: 10 -->
+    - [x] Add "Recurring Expenses" UI <!-- id: 30 -->
+    - [x] Implement Visualization (Progress Bars) <!-- id: 11 -->
+- [ ] Verification <!-- id: 13 -->
+    - [x] Test Budget features (Manual) <!-- id: 14 -->
+    - [x] Test Recurring features (Manual Trigger) <!-- id: 31 -->
+    - [x] Mobile view check <!-- id: 16 -->
+    - [x] Confirm with User <!-- id: 32 -->
+- [x] Fix & Enhance Recurring Features <!-- id: 33 -->
+    - [x] Fix: Missing Category in generated expense <!-- id: 34 -->
+    - [x] Feat: Add `/recurring/update` endpoint <!-- id: 35 -->
+    - [x] UI: Allow editing recurring rules in Streamlit <!-- id: 36 -->
+- [x] Harmonize Categories <!-- id: 37 -->
+    - [x] Update `worker/index.js`: Add "居住" to GPT prompt <!-- id: 38 -->
+    - [x] Update `app.py`: Sync category lists across all forms <!-- id: 39 -->
+- [x] UI Improvements <!-- id: 40 -->
+    - [x] Implement Emoji Selectbox for Budget Icons <!-- id: 41 -->
+    - [x] Feat: Budget Icon Grid Picker (10x4) <!-- id: 42 -->
+    - [x] UI: Custom HTML Progress Bars (Taller/Prettier) <!-- id: 43 -->
+    - [x] UI: Dark Mode Compatibility for Progress Bars <!-- id: 44 -->
+    - [x] UI: Harmonize Button Colors (Remove jarring Red) <!-- id: 45 -->
+- [x] Maintenance <!-- id: 46 -->
+    - [x] Fix Streamlit Deprecation Warnings (use_container_width) <!-- id: 47 -->
