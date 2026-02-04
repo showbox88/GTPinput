@@ -107,10 +107,72 @@ const OPENAPI_SPEC = {
                 }
             }
         },
+        "/delete": {
+            post: {
+                operationId: "deleteExpense",
+                summary: "Delete an expense record by ID",
+                description: "Use this to delete a record. FIRST call /list to find the ID of the record to delete.",
+                security: [{ ApiKeyAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    id: { type: "integer", description: "The ID of the record to delete" }
+                                },
+                                required: ["id"]
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    "200": {
+                        description: "Record deleted",
+                        content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } }
+                    }
+                }
+            }
+        },
+        "/update": {
+            post: {
+                operationId: "updateExpense",
+                summary: "Update an existing expense record",
+                description: "Use this to correct extended details. FIRST call /list to find the ID.",
+                security: [{ ApiKeyAuth: [] }],
+                requestBody: {
+                    required: true,
+                    content: {
+                        "application/json": {
+                            schema: {
+                                type: "object",
+                                properties: {
+                                    id: { type: "integer" },
+                                    date: { type: "string", description: "YYYY-MM-DD" },
+                                    item: { type: "string" },
+                                    amount: { type: "number" },
+                                    category: { type: "string" },
+                                    note: { type: "string" }
+                                },
+                                required: ["id"]
+                            }
+                        }
+                    }
+                },
+                responses: {
+                    "200": {
+                        description: "Record updated",
+                        content: { "application/json": { schema: { type: "object", properties: { ok: { type: "boolean" } } } } }
+                    }
+                }
+            }
+        },
         "/list": {
             get: {
                 operationId: "listExpenses",
-                summary: "List recent expense records",
+                summary: "List recent expense records (Use this to find IDs for delete/update)",
+                description: "Returns the last 200 records. Always call this BEFORE deleting or updating to ensure you have the correct ID.",
                 security: [{ ApiKeyAuth: [] }],
                 responses: {
                     "200": {
