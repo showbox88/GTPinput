@@ -366,9 +366,21 @@ with tab_settings:
             b_cat = c2.selectbox("对应分类", options=CATEGORIES)
             b_amt = c3.number_input("预算金额", min_value=0.0, step=100.0, value=1000.0)
             
+            # 常用 EMOJI 列表
+            EMOJI_OPTIONS = [
+                "💰", "🍔", "🍜", "🍱", "🍷", "☕", "🍰", "🍎",  # 餐饮
+                "🚗", "🚕", "🚇", "✈️", "⛽", "🚲",              # 交通
+                "🏠", "💡", "💧", "🔌", "🛋️",                   # 居住/水电
+                "🛒", "🛍️", "👕", "👠", "📱", "💻",              # 购物
+                "🍿", "🎮", "🎵", "🎨", "🎟️", "🎢",              # 娱乐
+                "💊", "🏥", "🏋️", "🧘", "💇",                   # 医疗/健康
+                "🎁", "📚", "🎓", "👶", "🐶", "🔧"               # 其他
+            ]
+            
             c4, c5 = st.columns(2)
             b_color = c4.color_picker("进度条颜色", "#FF4B4B")
-            b_icon = c5.text_input("图标 (Emoji)", value="🍔")
+            # b_icon = c5.text_input("图标 (Emoji)", value="🍔")
+            b_icon = c5.selectbox("选择图标", options=EMOJI_OPTIONS, index=1)
             
             if st.form_submit_button("➕ 添加预算计划"):
                 if add_budget(b_name, b_cat, b_amt, b_color, b_icon):
