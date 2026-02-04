@@ -323,8 +323,7 @@ with tab_dash:
             df_editor[final_cols],
             column_config=column_config,
             hide_index=True,
-            use_container_width=True, # data_editor still uses use_container_width in many docs, but warning may apply here due to new st.dataframe logic.
-            # Let's try matching the warning exactly for data_editor if it is indeed the source.
+            # width="stretch" replaces use_container_width=True as per deprecation warning
             width="stretch",
             num_rows="fixed",
             key="expense_editor"
@@ -343,7 +342,7 @@ with tab_dash:
             btn_label = f"🗑️ 确认删除 ({delete_count} 条)"
             btn_type = "secondary" 
         
-        if st.button(btn_label, type=btn_type, use_container_width=True):
+        if st.button(btn_label, type=btn_type, width="stretch"):
             try:
                 changes_made = False
                 # 1. Delete
@@ -421,13 +420,13 @@ with tab_settings:
                 # If selected, outline/primary, else secondary/ghost? 
                 # Streamlit button styles are limited. primary = filled, secondary = outline/default.
                 btn_type = "primary" if st.session_state["new_budget_icon"] == icon else "secondary"
-                if st.button(icon, key=f"btn_icon_{i}", type=btn_type, use_container_width=True):
+                if st.button(icon, key=f"btn_icon_{i}", type=btn_type, width="stretch"):
                     st.session_state["new_budget_icon"] = icon
                     st.rerun()
 
         st.divider()
 
-        if st.button("➕ 添加预算计划", type="primary", use_container_width=True):
+        if st.button("➕ 添加预算计划", type="primary", width="stretch"):
             if not b_name:
                 st.error("请输入预算名称")
             else:
@@ -538,7 +537,7 @@ with tab_settings:
                 r_btn_label = f"🗑️ 确认删除 ({r_delete_count} 条)"
                 r_btn_type = "secondary"
             
-            if st.button(r_btn_label, type=r_btn_type, use_container_width=True, key="save_rules"):
+            if st.button(r_btn_label, type=r_btn_type, width="stretch", key="save_rules"):
                 try:
                     r_changes = False
                     # 1. Delete
