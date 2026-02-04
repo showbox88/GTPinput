@@ -3,32 +3,69 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 
-# ====== 配置 ======
-SPREADSHEET_ID = "1s3JdFrzyfXMmJA7BRYK9xVsEASof_TxN3YMC8xbxW6E"
-SHEET_NAME = "Ledger_Clean"
-CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet={SHEET_NAME}"
+import requests
+
+# ====== 配置 (从 secrets 读取) ======
+# 需要在 .streamlit/secrets.toml 中配置 API_URL 和 API_KEY
+API_URL = st.secrets["general"]["API_URL"]
+API_KEY = st.secrets["general"]["API_KEY"]
 
 st.set_page_config(page_title="支出概览", layout="wide")
 
 # ====== 数据读取 ======
-@st.cache_data(ttl=30)  # 30秒缓存，兼顾实时与稳定
-def load_data(url: str) -> pd.DataFrame:
-    df = pd.read_csv(url)
+@st.cache_data(ttl=30)  # 30秒缓存
+def load_data() -> pd.DataFrame:
+    try:
+        url = f"{API_URL}/list"
+        headers = {"X-API-Key": API_KEY}
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        # 假设数据在 "rows" 字段中，如果直接是列表则直接用
+        rows = data.get("rows", []) if isinstance(data, dict) else data
+        
+        if not rows:
+            return pd.DataFrame()
+            
+        df = pd.DataFrame(rows)
+        
+        # ====== 字段映射与清洗 ======
+        # API返回: id, date, item, amount, category, note, source, created_at
+        # 目标列: 月(yyyy-mm), 分类, 有效金额, 创建时间
+        
+        # 1. 金额处理
+        if "amount" in df.columns:
+            df["有效金额"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+        
+        # 2. 日期处理
+        if "date" in df.columns:
+            df["日期"] = pd.to_datetime(df["date"], errors="coerce")
+            df["月(yyyy-mm)"] = df["日期"].dt.strftime("%Y-%m")
+            df["年"] = df["日期"].dt.year
+            
+        # 3. 分类
+        # 3. 分类
+        if "category" in df.columns:
+            df["分类"] = df["category"]
+            
+        # 4. 创建时间
+        if "created_at" in df.columns:
+            df["创建时间"] = pd.to_datetime(df["created_at"], errors="coerce")
+            
+        # 5. 其他展示字段映射
+        df["项目"] = df.get("item", "")
+        df["备注"] = df.get("note", "")
+        df["金额"] = df.get("amount", 0)  # 显示用的原始金额
+        df["来源"] = df.get("source", "")
 
-    # 兼容列名（以你的Sheet为准）
-    # 必需列：月(yyyy-mm)、分类、有效金额、创建时间、是否有效
-    if "是否有效" in df.columns:
-        df = df[df["是否有效"] == True]
-
-    # 类型修正
-    if "有效金额" in df.columns:
-        df["有效金额"] = pd.to_numeric(df["有效金额"], errors="coerce").fillna(0)
-
-    # 创建时间可能是 ISO 字符串
-    if "创建时间" in df.columns:
-        df["创建时间"] = pd.to_datetime(df["创建时间"], errors="coerce")
-
-    return df
+        return df
+        
+    except Exception as e:
+        st.error(f"数据加载失败: {e}")
+        return pd.DataFrame()
 
 # ====== 顶部工具条 ======
 top_left, top_right = st.columns([1, 4])
@@ -36,10 +73,11 @@ with top_left:
     if st.button("🔄 立即刷新"):
         st.cache_data.clear()
         time.sleep(0.2)
+        st.rerun()
 
 st.title("💰 支出概览")
 
-df = load_data(CSV_URL)
+df = load_data()
 
 if df.empty:
     st.info("还没有可统计的数据（是否有效=True 的记录为空）。先记几笔再来看图表。")
@@ -112,6 +150,9 @@ st.divider()
 
 # ====== 最近记录表 ======
 st.subheader("📄 最近记录（筛选后）")
-show_cols = [c for c in ["日期", "项目", "金额", "货币", "分类", "备注", "创建时间", "状态", "有效金额"] if c in df_view.columns]
+# 动态调整显示列，确保列存在
+all_possible_cols = ["日期", "项目", "金额", "分类", "来源", "备注", "创建时间", "有效金额"]
+show_cols = [c for c in all_possible_cols if c in df_view.columns]
+
 df_recent = df_view.sort_values("创建时间", ascending=False) if "创建时间" in df_view.columns else df_view
-st.dataframe(df_recent[show_cols].head(50), use_container_width=True)
+st.dataframe(df_recent[show_cols].head(50), use_container_width=True, hide_index=True)
