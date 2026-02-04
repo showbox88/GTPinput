@@ -134,15 +134,17 @@ with left:
     st.subheader("📈 月度趋势")
     if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns:
         month_sum = df.groupby("月(yyyy-mm)", as_index=False)["有效金额"].sum().sort_values("月(yyyy-mm)")
-        fig_line = px.line(month_sum, x="月(yyyy-mm)", y="有效金额", markers=True)
-        fig_line.update_layout(
+        # 改为柱状图 (Bar Chart)
+        fig_bar = px.bar(month_sum, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
+        fig_bar.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
+        fig_bar.update_layout(
             margin=dict(l=10, r=10, t=30, b=10),
             height=300,
             xaxis_title="",
             yaxis_title="金额 ($)",
             yaxis_tickprefix="$"
         )
-        st.plotly_chart(fig_line, use_container_width=True)
+        st.plotly_chart(fig_bar, use_container_width=True)
     else:
         st.warning("暂无月度数据")
 
