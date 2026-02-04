@@ -410,28 +410,100 @@ with tab_settings:
                     st.success("添加成功！")
                     st.rerun()
         
-        # List Existing Rules
+        # List Existing Rules (Editable)
         st.divider()
-        st.markdown("##### 📜 运行中的规则")
+        st.markdown("##### 📜 运行中的规则 (支持编辑)")
         curr_rules = get_recurring_rules()
+        
         if curr_rules:
-            for r in curr_rules:
-                active_icon = "🟢" if r['active'] else "🔴"
-                freq_map = {"weekly": "每周", "monthly": "每月", "yearly": "每年"}
-                day_str = f"第 {r['day']} 天"
-                if r['frequency'] == 'weekly':
-                    week_map = {1:"周一", 2:"周二", 3:"周三", 4:"周四", 5:"周五", 6:"周六", 7:"周日"}
-                    day_str = week_map.get(r['day'], str(r['day']))
-                elif r['frequency'] == 'monthly':
-                    day_str = f"{r['day']}号"
-                
-                col_r_info, col_r_del = st.columns([4, 1])
-                with col_r_info:
-                    st.markdown(f"{active_icon} **{r['name']}** (${r['amount']}) - {freq_map.get(r['frequency'], r['frequency'])} {day_str} | 上次运行: {r.get('last_run_date', '无')}")
-                with col_r_del:
-                    if st.button("删除", key=f"del_r_{r['id']}"):
-                        if delete_recurring(r['id']):
-                            st.rerun()
+            df_rules = pd.DataFrame(curr_rules)
+            
+            # 字段简单的预处理
+            if "active" not in df_rules.columns:
+                df_rules["active"] = 1
+            
+            # 将 active (1/0) 转为 bool 给 Checkbox 使用
+            df_rules["启用"] = df_rules["active"].apply(lambda x: True if x == 1 else False)
+            
+            # 删除标记列
+            df_rules.insert(0, "删除", False)
+            
+            if "id" in df_rules.columns:
+                df_rules.set_index("id", inplace=True)
+
+            # 配置列
+            # Schema: name text, amount real, category text, frequency text, day integer, last_run_date text
+            r_col_config = {
+                "删除": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
+                "启用": st.column_config.CheckboxColumn("✅", width="small", default=True),
+                "name": st.column_config.TextColumn("名称", width="medium", required=True),
+                "amount": st.column_config.NumberColumn("金额", min_value=0.0, format="$%.2f", width="small", required=True),
+                "category": st.column_config.SelectboxColumn("分类", options=["居住", "餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "其他"], width="small", required=True),
+                "frequency": st.column_config.SelectboxColumn("频率", options=["weekly", "monthly", "yearly"], width="small", required=True),
+                "day": st.column_config.NumberColumn("日期/Day", width="small", min_value=1, max_value=366, required=True, help="Weekly:1-7; Monthly:1-31"),
+                "last_run_date": st.column_config.TextColumn("上次运行", disabled=True, width="medium"),
+            }
+            
+            # 显示的列
+            r_show_cols = ["删除", "启用", "name", "amount", "category", "frequency", "day", "last_run_date"]
+            
+            edited_rules = st.data_editor(
+                df_rules[r_show_cols],
+                column_config=r_col_config,
+                hide_index=True,
+                use_container_width=True,
+                key="recurring_editor"
+            )
+            
+            # Save Logic
+            r_to_delete_mask = edited_rules["删除"] == True
+            r_delete_count = r_to_delete_mask.sum()
+            
+            r_editor_state = st.session_state.get("recurring_editor", {})
+            r_edited_rows = r_editor_state.get("edited_rows", {})
+            r_has_edits = len(r_edited_rows) > 0
+            
+            r_btn_label = "💾 保存规则修改"
+            r_btn_type = "primary"
+            if r_delete_count > 0:
+                r_btn_label = f"🗑️ 确认删除 ({r_delete_count} 条)"
+                r_btn_type = "secondary"
+            
+            if st.button(r_btn_label, type=r_btn_type, use_container_width=True, key="save_rules"):
+                try:
+                    r_changes = False
+                    # 1. Delete
+                    if r_delete_count > 0:
+                        for rid, row in edited_rules[r_to_delete_mask].iterrows():
+                             requests.post(f"{API_URL}/recurring/delete", json={"id": int(rid)}, headers={"X-API-Key": API_KEY})
+                        st.success(f"已删除 {r_delete_count} 条规则")
+                        r_changes = True
+                    
+                    # 2. Update
+                    if r_has_edits:
+                         for idx, changes in r_edited_rows.items():
+                             row = edited_rules.iloc[idx]
+                             if row["删除"]: continue
+                             
+                             payload = {
+                                 "id": int(row.name),
+                                 "name": row["name"],
+                                 "amount": float(row["amount"]),
+                                 "category": row["category"],
+                                 "frequency": row["frequency"],
+                                 "day": int(row["day"]),
+                                 "active": bool(row["启用"])
+                             }
+                             requests.post(f"{API_URL}/recurring/update", json=payload, headers={"X-API-Key": API_KEY})
+                         st.success("规则已更新")
+                         r_changes = True
+                    
+                    if r_changes:
+                        time.sleep(1)
+                        st.rerun()
+
+                except Exception as e:
+                    st.error(f"操作失败: {e}")
         else:
             st.info("暂无规则。")
         

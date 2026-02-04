@@ -328,6 +328,57 @@ async function parseWithOpenAI(env, text, refDate) {
 }
 __name(parseWithOpenAI, "parseWithOpenAI");
 
+async function processRecurringExpenses(env) {
+    const todayDate = new Date();
+    const todayStr = todayDate.toISOString().slice(0, 10); // YYYY-MM-DD
+    const dayOfWeek = todayDate.getDay() || 7; // 1 (Mon) - 7 (Sun)
+    const dayOfMonth = todayDate.getDate(); // 1-31
+    const month = todayDate.getMonth() + 1; // 1-12
+    const dayOfYear = Math.floor((todayDate - new Date(todayDate.getFullYear(), 0, 0)) / 1000 / 60 / 60 / 24);
+
+    // Get all active rules
+    const rules = await env.expense_db.prepare("SELECT * FROM recurring_rules WHERE active = 1").all();
+    const results = rules.results || [];
+
+    let processed = 0;
+
+    for (const rule of results) {
+        // Check if already run today
+        if (rule.last_run_date === todayStr) continue;
+
+        let shouldRun = false;
+
+        if (rule.frequency === 'weekly' && rule.day === dayOfWeek) shouldRun = true;
+        if (rule.frequency === 'monthly' && rule.day === dayOfMonth) shouldRun = true;
+        if (rule.frequency === 'yearly') {
+            // Simple yearly check (day field could store DayOfYear or we parse specific logic, 
+            // but for simplicity in this MVP let's assume day field stores MMDD integer e.g. 101 for Jan 1st? 
+            // Or better, let's keep it simple: Yearly not fully supported in this simple logic without more complex schema.
+            // Let's stick to Weekly/Monthly for MVP as requested "weekly or monthly" in prompt.
+            // User prompt said: "weekly or monthly ... or yearly".
+            // Let's support Yearly by assuming 'day' is encoded or just relying on month/day check if we had correct columns.
+            // Current schema only has 'day'. Let's skip yearly for a moment or treat 'day' as DayOfYear.
+            if (rule.day === dayOfYear) shouldRun = true;
+        }
+
+        if (shouldRun) {
+            // Insert Expense
+            await env.expense_db.prepare(
+                "INSERT INTO expenses (date, item, amount, category, note, source) VALUES (?, ?, ?, ?, ?, ?)"
+            ).bind(todayStr, rule.name, rule.amount, rule.category, "Auto-Recurring", "system").run();
+
+            // Update Rule last_run_date
+            await env.expense_db.prepare(
+                "UPDATE recurring_rules SET last_run_date = ? WHERE id = ?"
+            ).bind(todayStr, rule.id).run();
+
+            processed++;
+        }
+    }
+    return processed;
+}
+__name(processRecurringExpenses, "processRecurringExpenses");
+
 // =========================
 // Worker fetch
 // =========================
@@ -459,11 +510,109 @@ var index_default = {
                 return json({ ok: res.success, meta: res.meta });
             }
 
+            // ====== V3.0 Features ======
+
+            // Budget: list
+            if (req.method === "GET" && url.pathname === "/budget/list") {
+                auth(req, env);
+                // Careful: table might not exist if user didn't run migration.
+                try {
+                    const res = await env.expense_db.prepare("SELECT * FROM budgets ORDER BY id DESC").all();
+                    return json({ ok: true, rows: res.results || [] });
+                } catch (e) {
+                    return json({ ok: false, error: "Table 'budgets' likely missing. Please create it." }, 500);
+                }
+            }
+
+            // Budget: add
+            if (req.method === "POST" && url.pathname === "/budget/add") {
+                auth(req, env);
+                const body = await req.json();
+                const res = await env.expense_db
+                    .prepare("INSERT INTO budgets (name, category, amount, color, icon) VALUES (?, ?, ?, ?, ?)")
+                    .bind(body.name, body.category, body.amount, body.color || '#FF4B4B', body.icon || '💰')
+                    .run();
+                return json({ ok: res.success, meta: res.meta });
+            }
+
+            // Budget: delete
+            if (req.method === "POST" && url.pathname === "/budget/delete") {
+                auth(req, env);
+                const body = await req.json();
+                const res = await env.expense_db.prepare("DELETE FROM budgets WHERE id = ?").bind(body.id).run();
+                return json({ ok: res.success, meta: res.meta });
+            }
+
+            // Recurring: list
+            if (req.method === "GET" && url.pathname === "/recurring/list") {
+                auth(req, env);
+                try {
+                    const res = await env.expense_db.prepare("SELECT * FROM recurring_rules WHERE active = 1 ORDER BY id DESC").all();
+                    return json({ ok: true, rows: res.results || [] });
+                } catch (e) {
+                    return json({ ok: false, error: "Table 'recurring_rules' likely missing." }, 500);
+                }
+            }
+
+            // Recurring: add
+            if (req.method === "POST" && url.pathname === "/recurring/add") {
+                auth(req, env);
+                const body = await req.json();
+                const res = await env.expense_db
+                    .prepare("INSERT INTO recurring_rules (name, amount, category, frequency, day) VALUES (?, ?, ?, ?, ?)")
+                    .bind(body.name, body.amount, body.category, body.frequency, body.day)
+                    .run();
+                return json({ ok: res.success, meta: res.meta });
+            }
+
+            // Recurring: delete
+            if (req.method === "POST" && url.pathname === "/recurring/delete") {
+                auth(req, env);
+                const body = await req.json();
+                const res = await env.expense_db.prepare("DELETE FROM recurring_rules WHERE id = ?").bind(body.id).run();
+                return json({ ok: res.success, meta: res.meta });
+            }
+
+            // Recurring: update
+            if (req.method === "POST" && url.pathname === "/recurring/update") {
+                auth(req, env);
+                const body = await req.json();
+                if (!body.id) return json({ detail: "id is required" }, 422);
+
+                const res = await env.expense_db
+                    .prepare(`UPDATE recurring_rules 
+                              SET name = ?, amount = ?, category = ?, frequency = ?, day = ?, active = ?
+                              WHERE id = ?`)
+                    .bind(
+                        body.name,
+                        body.amount,
+                        body.category,
+                        body.frequency,
+                        body.day,
+                        body.active === undefined ? 1 : (body.active ? 1 : 0),
+                        body.id
+                    )
+                    .run();
+                return json({ ok: res.success, meta: res.meta });
+            }
+
+            // Recurring: check (Manual Trigger)
+            if (req.method === "GET" && url.pathname === "/recurring/check") {
+                auth(req, env);
+                const processed = await processRecurringExpenses(env);
+                return json({ ok: true, processed });
+            }
+
             return new Response("Not Found", { status: 404 });
         } catch (e) {
             if (e instanceof Response) return e;
             return json({ error: String(e?.message || e) }, 500);
         }
+    },
+
+    // Cron Trigger Handler
+    async scheduled(event, env, ctx) {
+        ctx.waitUntil(processRecurringExpenses(env));
     }
 };
 
