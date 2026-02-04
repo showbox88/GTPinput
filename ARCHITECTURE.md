@@ -1,78 +1,68 @@
-# 系统结构与职责划分
+# System Architecture
 
-本系统采用分层架构，每一层职责单一、可独立替换。
+## Overview
+This project is a daily expense tracking system designed for speed, decoupling, and statelessness.
 
----
+## Components
 
-## 1. 输入层（GPT）
+### 1. User Interface (Input)
+- **Component**: Custom GPT
+- **Role**: Daily Expense Recording Assistant
+- **Responsibility**:
+    - Natural language processing
+    - Extracts `amount`, `category`, `description`, `date`
+    - Calls `addExpense` tool
+- **Constraint**: Stateless
 
-职责：
-- 接收自然语言
-- 提取结构化字段
-- 不负责任何业务判断（如是否有效）
+### 2. API Layer & Execution
+- **Component**: Cloudflare Worker
+- **Role**: Pure API Layer
+- **Responsibility**:
+    - CRUD operations
+    - No UI or AI logic
+- **Endpoints** (Typical):
+    - `POST /expense`
+    - `GET /expenses` (Note: Current implementation uses `/list`)
+    - `PUT /expense/:id`
+    - `DELETE /expense/:id`
+    - `GET /stats`
 
-输出 JSON 示例：
-{
-  "date": "2026-02-02",
-  "item": "午饭",
-  "amount": 32,
-  "currency": "CNY",
-  "category": "餐饮",
-  "status": "normal"
-}
+### 3. Data Storage
+- **Component**: SQLite (via Cloudflare D1 or similar)
+- **Schema**: `expenses` table
+    - `id`
+    - `amount`
+    - `category`
+    - `description`
+    - `date`
+    - `created_at`
+- **Design**: Flat schema, no nested JSON.
 
----
+### 4. Visualization (Frontend)
+- **Component**: Streamlit App
+- **Role**: Read-only Dashboard
+- **Responsibility**:
+    - Fetch data from API (No direct DB access)
+    - Visualization (Trends, Pie Charts)
+    - List view
+- **Current Implementation**: `app.py`
 
-## 2. 执行层（Make）
+## Data Flow
+User -> GPT -> (tool call) -> Cloudflare Worker -> SQLite -> Streamlit
 
-职责：
-- 接收 GPT Webhook
-- 兜底逻辑（默认 status=normal）
-- 写入 Google Sheets
+## Constraints
+- Fast write path is critical.
+- No dependency on Make or Google Sheets (Legacy dependencies removed).
+- Database schema changes must be backward-compatible.
 
-约束：
-- 只写 Ledger_Raw
-- 不修改历史记录
-- 不做统计
-
----
-
-## 3. 数据层（Google Sheets）
-
-### Ledger_Raw
-- Source of Truth
-- 允许删除行
-- 不允许公式
-
-### Ledger_Clean
-- 全公式派生
-- 数据标准化层
-- 口径统一层
-
-### Summary_*
-- 聚合视图
-- 仅读 Ledger_Clean
-
----
-
-## 4. 展示层（Streamlit）
-
-职责：
-- 只读数据
-- 不回写
-- 不参与业务判断
-
-特性：
-- 可缓存
-- 可部署
-- 可扩展
-
----
-
-## 5. 设计原则
-
-- 单一写入点
-- 数据向下流动
-- 不反向依赖
-- 删除不会破坏系统
-- 任一层都可替换
+## Future Roadmap (Planned)
+1. **Budgeting System**:
+   - Set monthly limits per category.
+   - Visual progress bars showing usage vs. limit.
+2. **Fixed Recurring Expenses**:
+   - Automated logging for regular bills (insurance, phone, subscriptions).
+   - Likely requires Cloudflare Worker Triggers (Cron).
+3. **Savings Plans**:
+   - Goal-based savings (e.g., "Travel Fund").
+   - Target amounts and periodic auto-allocation.
+   - Progress visualization.
