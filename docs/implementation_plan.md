@@ -24,7 +24,7 @@ CREATE TABLE budgets (
   name TEXT NOT NULL,          -- "Food Plan"
   category TEXT NOT NULL,      -- "Dining"
   amount REAL NOT NULL,        -- 3000
-  color TEXT DEFAULT '#FF4B4B',
+  color TEXT DEFAULT '#4559ceff',
   icon TEXT DEFAULT '💰',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
