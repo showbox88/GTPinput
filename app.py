@@ -66,287 +66,396 @@ def load_data() -> pd.DataFrame:
         st.error(f"数据加载失败: {e}")
         return pd.DataFrame()
 
-# ====== 顶部工具条 ======
-top_left, top_right = st.columns([1, 4])
-with top_left:
-    if st.button("🔄 立即刷新"):
+# ====== Helper Functions for V3.0 ======
+def get_budgets():
+    try:
+        resp = requests.get(f"{API_URL}/budget/list", headers={"X-API-Key": API_KEY}, timeout=5)
+        if resp.status_code == 200:
+            return resp.json().get("rows", [])
+    except:
+        pass
+    return []
+
+def add_budget(name, category, amount, color, icon):
+    try:
+        payload = {"name": name, "category": category, "amount": float(amount), "color": color, "icon": icon}
+        requests.post(f"{API_URL}/budget/add", json=payload, headers={"X-API-Key": API_KEY})
         st.cache_data.clear()
-        time.sleep(0.2)
-        st.rerun()
+        return True
+    except Exception as e:
+        st.error(f"添加失败: {e}")
+        return False
 
-st.title("💰 支出概览")
+def delete_budget(bid):
+    try:
+        requests.post(f"{API_URL}/budget/delete", json={"id": int(bid)}, headers={"X-API-Key": API_KEY})
+        st.cache_data.clear()
+        return True
+    except:
+        return False
 
+def get_recurring_rules():
+    try:
+        resp = requests.get(f"{API_URL}/recurring/list", headers={"X-API-Key": API_KEY}, timeout=5)
+        if resp.status_code == 200:
+            return resp.json().get("rows", [])
+    except:
+        pass
+    return []
+
+def add_recurring(name, amount, category, frequency, day):
+    try:
+        payload = {"name": name, "amount": float(amount), "category": category, "frequency": frequency, "day": int(day)}
+        requests.post(f"{API_URL}/recurring/add", json=payload, headers={"X-API-Key": API_KEY})
+        return True
+    except Exception as e:
+        st.error(f"添加失败: {e}")
+        return False
+
+def delete_recurring(rid):
+    try:
+        requests.post(f"{API_URL}/recurring/delete", json={"id": int(rid)}, headers={"X-API-Key": API_KEY})
+        return True
+    except:
+        return False
+
+# ==========================================
+# Main App Layout with Tabs
+# ==========================================
+
+tab_dash, tab_settings = st.tabs(["📊 仪表盘 (Dashboard)", "⚙️ 管理与设置 (Settings)"])
+
+# ====== DATA LOADING ======
 df = load_data()
 
-if df.empty:
-    st.info("还没有可统计的数据（是否有效=True 的记录为空）。先记几笔再来看图表。")
-    # 这里不能直接 stop，否则无法显示清空按钮（虽然没数据也就不用清空，但为了逻辑完整）
-    # st.stop() 
-
-# ====== 侧边栏筛选 ======
-st.sidebar.header("筛选")
+# ====== SIDEBAR FILTERS (Shared effect) ======
+st.sidebar.header("筛选 (Filter)")
 months = sorted(df["月(yyyy-mm)"].dropna().unique().tolist()) if "月(yyyy-mm)" in df.columns else []
-default_month = months[-1] if months else None
-
 sel_month = st.sidebar.selectbox("月份", options=["全部"] + months, index=(len(months) if months else 0))
+
 sel_categories = None
 if "分类" in df.columns:
     cats = sorted(df["分类"].dropna().unique().tolist())
-    sel_categories = st.sidebar.multiselect("分类（可多选）", options=cats, default=[])
+    sel_categories = st.sidebar.multiselect("分类", options=cats, default=[])
 
-# 应用筛选
+# Apply Filter
 df_view = df.copy()
-if sel_month != "全部" and "月(yyyy-mm)" in df_view.columns:
-    df_view = df_view[df_view["月(yyyy-mm)"] == sel_month]
+is_current_month = False # Flag for budget calc
+
+# If "All" is selected, we can't really calculate monthly budget progress accurately unless we pick 'this month' implicitly?
+# Budget logic: Usually compares CURRENT MONTH spending vs Budget.
+# If user selects a specific month, we show budget progress for THAT month.
+# If user selects "All", maybe we default to Current Month for the Progress Bars? Or hide them?
+# Let's align Budget Progress with "Selected Month". If "All", we show "Current Month" progress.
+
+target_month_for_budget = pd.Timestamp.today().strftime("%Y-%m")
+if sel_month != "全部":
+    df_view = df_view[df_view["月(yyyy-mm)"] == sel_month] if "月(yyyy-mm)" in df_view.columns else df_view
+    target_month_for_budget = sel_month
 
 if sel_categories:
     df_view = df_view[df_view["分类"].isin(sel_categories)]
 
-# ====== KPI ======
-k1, k2, k3, k4 = st.columns(4)
 
-# 本月（按今天所属月）
-this_month = pd.Timestamp.today().strftime("%Y-%m")
-this_year = pd.Timestamp.today().year
+# ==========================
+# TAB 1: DASHBOARD
+# ==========================
+with tab_dash:
+    # --- KPI ---
+    k1, k2, k3, k4 = st.columns(4)
+    
+    this_month = pd.Timestamp.today().strftime("%Y-%m")
+    this_year = pd.Timestamp.today().year
+    
+    # Safe Sum Helper
+    def safe_sum(dataframe, col):
+        return dataframe[col].sum() if col in dataframe.columns else 0
 
-# 安全获取 sum，防止 Key Error
-def safe_sum(dataframe, col):
-    if col in dataframe.columns:
-        return dataframe[col].sum()
-    return 0
+    month_total = df[df["月(yyyy-mm)"] == this_month]["有效金额"].sum() if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns else 0
+    year_total = df[df["年"] == this_year]["有效金额"].sum() if "年" in df.columns and "有效金额" in df.columns else 0
+    view_total = safe_sum(df_view, "有效金额")
+    
+    k1.metric("📅 本月支出", f"${month_total:,.2f}")
+    k2.metric("🗓️ 今年支出", f"${year_total:,.2f}")
+    k3.metric("🔍 当前筛选合计", f"${view_total:,.2f}")
+    k4.metric("📝 记录笔数", f"{len(df_view)}")
+    
+    st.divider()
 
-month_total = df[df["月(yyyy-mm)"] == this_month]["有效金额"].sum() if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns else 0
-year_total = df[df["年"] == this_year]["有效金额"].sum() if "年" in df.columns and "有效金额" in df.columns else 0
-view_total = safe_sum(df_view, "有效金额")
-
-k1.metric("📅 本月支出", f"${month_total:,.2f}")
-k2.metric("🗓️ 今年支出", f"${year_total:,.2f}")
-k3.metric("🔍 当前筛选合计", f"${view_total:,.2f}")
-k4.metric("📝 记录笔数", f"{len(df_view)}")
-
-st.divider()
-
-# ====== 图表区：左趋势 右饼图 ======
-# 移动端适配：st.columns 在手机上会垂直堆叠，默认行为
-left, right = st.columns([2, 1])
-
-with left:
-    st.subheader("📈 月度趋势")
-    if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns:
-        month_sum = df.groupby("月(yyyy-mm)", as_index=False)["有效金额"].sum().sort_values("月(yyyy-mm)")
-        # 改为柱状图 (Bar Chart)
-        fig_bar = px.bar(month_sum, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
-        fig_bar.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
-        fig_bar.update_layout(
-            margin=dict(l=10, r=10, t=30, b=10),
-            height=300,
-            xaxis_title="",
-            yaxis_title="金额 ($)",
-            yaxis_tickprefix="$"
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
+    # --- BUDGET PROGRESS (New) ---
+    st.subheader(f"📊 预算进度 ({target_month_for_budget})")
+    budgets = get_budgets()
+    
+    if not budgets:
+        st.info("暂无预算计划，请去“管理与设置”中添加。")
     else:
-        st.warning("暂无月度数据")
+        # Calculate spending for the target month per category
+        # getting full data for calculation to avoid filter interference (except month)
+        df_budget_calc = df.copy()
+        if "月(yyyy-mm)" in df_budget_calc.columns:
+            df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == target_month_for_budget]
+        
+        # Display in columns of 3
+        b_cols = st.columns(3)
+        for i, b in enumerate(budgets):
+            with b_cols[i % 3]:
+                b_cat = b["category"]
+                b_limit = b["amount"]
+                b_icon = b.get("icon", "💰")
+                b_name = b.get("name", b_cat)
+                b_color = b.get("color", "#FF4B4B")
+                
+                # Actual spent in this category for this month
+                spent = 0
+                if "分类" in df_budget_calc.columns and "有效金额" in df_budget_calc.columns:
+                    spent = df_budget_calc[df_budget_calc["分类"] == b_cat]["有效金额"].sum()
+                
+                pct = (spent / b_limit) if b_limit > 0 else 0
+                pct_disp = min(pct, 1.0)
+                
+                # Custom progress bar label
+                st.caption(f"{b_icon} **{b_name}** ({b_cat})")
+                st.progress(pct_disp, text=f"${spent:,.0f} / ${b_limit:,.0f} ({pct:.1%})")
+                if pct > 1.0:
+                    st.warning(f"⚠️ 已超支 {pct-1:.1%}")
 
-with right:
-    st.subheader("🥧 分类占比")
-    if "分类" in df_view.columns and "有效金额" in df_view.columns:
-        cat_sum = df_view.groupby("分类", as_index=False)["有效金额"].sum().sort_values("有效金额", ascending=False)
-        if cat_sum.empty:
-            st.info("无数据")
-        else:
-            fig_pie = px.pie(cat_sum, names="分类", values="有效金额", hole=0.4)
-            fig_pie.update_layout(
+    st.divider()
+
+    # --- CHARTS ---
+    # 移动端适配：st.columns 在手机上会垂直堆叠
+    left, right = st.columns([2, 1])
+
+    with left:
+        st.subheader("📈 月度趋势")
+        if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns:
+            month_sum = df.groupby("月(yyyy-mm)", as_index=False)["有效金额"].sum().sort_values("月(yyyy-mm)")
+            fig_bar = px.bar(month_sum, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
+            fig_bar.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
+            fig_bar.update_layout(
                 margin=dict(l=10, r=10, t=30, b=10),
                 height=300,
-                showlegend=False # 手机上隐藏图例更清晰
+                xaxis_title="",
+                yaxis_title="金额 ($)",
+                yaxis_tickprefix="$"
             )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
-    else:
-        st.warning("暂无分类数据")
-
-st.divider()
-
-# ====== 最近记录表 (支持修改/删除) ======
-st.subheader("📄 最近记录")
-
-# 准备编辑的数据
-# 确保 ID 存在，用于 API 调用
-if not df_view.empty:
-    # 构造显示的 DataFrame
-    df_editor = df_view.copy()
-    
-    # 核心修正：将 ID 设为 Index，这样 st.data_editor(hide_index=True) 就能隐藏 ID，
-    # 同时保留 ID 用于后续逻辑 (通过 row.name 获取)
-    if "id" in df_editor.columns:
-        df_editor.set_index("id", inplace=True)
-    
-    # 添加一个 "删除" 勾选列，默认 False
-    if "删除" not in df_editor.columns:
-        df_editor.insert(0, "删除", False)
-
-    # 需要显示的列（ID是索引，不需要在 columns 里写）
-    show_cols = ["删除", "日期", "项目", "金额", "分类", "备注"]
-    
-    # 确保列存在
-    final_cols = [c for c in show_cols if c in df_editor.columns]
-    
-    # 配置列编辑器
-    column_config = {
-        "删除": st.column_config.CheckboxColumn(
-            "🗑️",
-            width="small",
-            default=False,
-            help="勾选删除"
-        ),
-        # ID 不在 columns 里了，不需要配置
-        "日期": st.column_config.DateColumn(
-            "日期",
-            format="YYYY-MM-DD",
-            required=True,
-            width="small"
-        ),
-        "项目": st.column_config.TextColumn("项目", width="medium"),
-        "金额": st.column_config.NumberColumn(
-            "金额",
-            min_value=0,
-            format="$%.2f",
-            required=True,
-            width="small"
-        ),
-        "分类": st.column_config.SelectboxColumn(
-            "分类",
-            options=["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "其他"],
-            required=True,
-            width="small"
-        ),
-        "备注": st.column_config.TextColumn("备注", width="medium")
-    }
-
-    # 按照创建时间倒序排
-    if "创建时间" in df_editor.columns:
-        df_editor = df_editor.sort_values("创建时间", ascending=False)
-
-    # 显示编辑器
-    edited_df = st.data_editor(
-        df_editor[final_cols],
-        column_config=column_config,
-        hide_index=True, # 隐藏 Index (即 ID)
-        use_container_width=True,
-        num_rows="fixed",
-        key="expense_editor"
-    )
-
-    # 操作按钮区
-    to_delete_mask = edited_df["删除"] == True
-    delete_count = to_delete_mask.sum()
-    
-    # 检查是否有编辑
-    editor_state = st.session_state.get("expense_editor", {})
-    edited_rows_dict = editor_state.get("edited_rows", {})
-    has_edits = len(edited_rows_dict) > 0
-    
-    btn_label = "💾 保存修改"
-    btn_type = "primary"
-    
-    if delete_count > 0:
-        btn_label = f"🗑️ 确认删除 ({delete_count} 条)"
-        btn_type = "secondary" 
-    elif has_edits:
-        btn_label = "💾 保存修改"
-    
-    if st.button(btn_label, type=btn_type, use_container_width=True):
-        try:
-            changes_made = False
-            
-            # 1. Delete Logic
-            if delete_count > 0:
-                to_delete = edited_df[to_delete_mask]
-                success_del = 0
-                for rec_id, row in to_delete.iterrows():
-                    # 因为 ID 是 Index，所以 rec_id 就是 ID
-                    # 确保是 int
-                    safe_id = int(rec_id)
-                    
-                    del_url = f"{API_URL}/delete"
-                    resp = requests.post(del_url, json={"id": safe_id}, headers={"X-API-Key": API_KEY}, timeout=10)
-                    
-                    if resp.status_code == 200:
-                        success_del += 1
-                    else:
-                        st.error(f"删除失败 ID {safe_id}")
-                
-                if success_del > 0:
-                    st.success(f"已删除 {success_del} 条记录")
-                    changes_made = True
-
-            # 2. Update Logic
-            if has_edits:
-                update_count = 0
-                for idx, changes in edited_rows_dict.items():
-                    # idx: index in edited_df (integer position)
-                    row = edited_df.iloc[idx]
-                    
-                    if row["删除"]: continue 
-                    
-                    # ID 是 Index
-                    safe_id = int(row.name)
-                    
-                    payload = {
-                        "id": safe_id,
-                        "date": row["日期"].strftime("%Y-%m-%d") if hasattr(row["日期"], "strftime") else str(row["日期"]),
-                        "item": row["项目"],
-                        "amount": float(row["金额"]),
-                        "category": row["分类"],
-                        "note": row["备注"] if row["备注"] else None
-                    }
-                    
-                    upd_url = f"{API_URL}/update"
-                    resp = requests.post(upd_url, json=payload, headers={"X-API-Key": API_KEY}, timeout=10)
-                    
-                    if resp.status_code == 200:
-                        update_count += 1
-                    else:
-                        st.error(f"更新失败 ID {safe_id}: {resp.text}")
-
-                if update_count > 0:
-                    st.success(f"已更新 {update_count} 条记录")
-                    changes_made = True
-
-            if changes_made:
-                time.sleep(1)
-                st.cache_data.clear()
-                st.rerun()
-            elif delete_count == 0 and not has_edits:
-                 st.info("未检测到修改，请先编辑或勾选删除。")
-
-        except Exception as e:
-            st.error(f"操作发生错误: {e}")
-else:
-    st.info("暂无数据。")
-
-# ====== Danger Zone ======
-st.divider()
-with st.expander("🚨 危险操作区 (Danger Zone)"):
-    st.warning("以下操作不可恢复，请谨慎使用。")
-    
-    confirm_clear = st.checkbox("我确认要清空所有数据 (Delete All Data)")
-    
-    if st.button("💣 立即清空所有数据", type="secondary"):
-        if not confirm_clear:
-            st.error("请先勾选确认框，防止误操作。")
+            st.plotly_chart(fig_bar, use_container_width=True)
         else:
+            st.warning("暂无月度数据")
+
+    with right:
+        st.subheader("🥧 分类占比")
+        if "分类" in df_view.columns and "有效金额" in df_view.columns:
+            cat_sum = df_view.groupby("分类", as_index=False)["有效金额"].sum().sort_values("有效金额", ascending=False)
+            if cat_sum.empty:
+                st.info("无数据")
+            else:
+                fig_pie = px.pie(cat_sum, names="分类", values="有效金额", hole=0.4)
+                fig_pie.update_layout(
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    height=300,
+                    showlegend=False
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_pie, use_container_width=True)
+        else:
+            st.warning("暂无分类数据")
+
+    st.divider()
+
+    # --- RECENT RECORDS (Data Editor) ---
+    st.subheader("📄 最近记录")
+    if not df_view.empty:
+        df_editor = df_view.copy()
+        if "id" in df_editor.columns:
+            df_editor.set_index("id", inplace=True)
+        
+        if "删除" not in df_editor.columns:
+            df_editor.insert(0, "删除", False)
+
+        show_cols = ["删除", "日期", "项目", "金额", "分类", "备注"]
+        final_cols = [c for c in show_cols if c in df_editor.columns]
+        
+        column_config = {
+            "删除": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
+            "日期": st.column_config.DateColumn("日期", format="YYYY-MM-DD", width="small"),
+            "项目": st.column_config.TextColumn("项目", width="medium"),
+            "金额": st.column_config.NumberColumn("金额", min_value=0, format="$%.2f", width="small"),
+            "分类": st.column_config.SelectboxColumn("分类", options=["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "其他"], width="small"),
+            "备注": st.column_config.TextColumn("备注", width="medium")
+        }
+
+        if "创建时间" in df_editor.columns:
+            df_editor = df_editor.sort_values("创建时间", ascending=False)
+
+        edited_df = st.data_editor(
+            df_editor[final_cols],
+            column_config=column_config,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            key="expense_editor"
+        )
+
+        # Logic for Save/Delete buttons (Same as before)
+        to_delete_mask = edited_df["删除"] == True
+        delete_count = to_delete_mask.sum()
+        editor_state = st.session_state.get("expense_editor", {})
+        edited_rows_dict = editor_state.get("edited_rows", {})
+        has_edits = len(edited_rows_dict) > 0
+        
+        btn_label = "💾 保存修改"
+        btn_type = "primary"
+        if delete_count > 0:
+            btn_label = f"🗑️ 确认删除 ({delete_count} 条)"
+            btn_type = "secondary" 
+        
+        if st.button(btn_label, type=btn_type, use_container_width=True):
             try:
-                clear_url = f"{API_URL}/clear"
-                resp = requests.post(clear_url, headers={"X-API-Key": API_KEY}, timeout=15)
+                changes_made = False
+                # 1. Delete
+                if delete_count > 0:
+                    for rec_id, row in edited_df[to_delete_mask].iterrows():
+                        requests.post(f"{API_URL}/delete", json={"id": int(rec_id)}, headers={"X-API-Key": API_KEY})
+                    st.success(f"已删除 {delete_count} 条")
+                    changes_made = True
                 
-                if resp.status_code == 200:
-                    st.success("所有数据已清空。")
+                # 2. Update
+                if has_edits:
+                    for idx, changes in edited_rows_dict.items():
+                        row = edited_df.iloc[idx]
+                        if row["删除"]: continue
+                        payload = {
+                            "id": int(row.name),
+                            "date": row["日期"].strftime("%Y-%m-%d") if hasattr(row["日期"], "strftime") else str(row["日期"]),
+                            "item": row["项目"],
+                            "amount": float(row["金额"]),
+                            "category": row["分类"],
+                            "note": row["备注"]
+                        }
+                        requests.post(f"{API_URL}/update", json=payload, headers={"X-API-Key": API_KEY})
+                    st.success("已更新修改")
+                    changes_made = True
+
+                if changes_made:
                     time.sleep(1)
                     st.cache_data.clear()
                     st.rerun()
-                else:
-                    st.error(f"清空失败: {resp.text}")
             except Exception as e:
-                st.error(f"API 请求失败: {e}")
+                st.error(f"操作失败: {e}")
+    else:
+        st.info("暂无数据。")
+
+
+# ==========================
+# TAB 2: SETTINGS & MANAGEMENT
+# ==========================
+with tab_settings:
+    st.header("⚙️ 设置与数据管理")
+    
+    # --- 1. Budget Settings ---
+    with st.expander("💰 预算管理 (Budget Plans)", expanded=True):
+        st.caption("设置每个分类的月度预算，将在首页展示进度条。")
+        
+        # Add New Budget Form
+        with st.form("add_budget_form", clear_on_submit=True):
+            c1, c2, c3 = st.columns(3)
+            b_name = c1.text_input("预算名称", placeholder="例如：本月伙食")
+            b_cat = c2.selectbox("对应分类", options=["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "其他"])
+            b_amt = c3.number_input("预算金额", min_value=0.0, step=100.0, value=1000.0)
+            
+            c4, c5 = st.columns(2)
+            b_color = c4.color_picker("进度条颜色", "#FF4B4B")
+            b_icon = c5.text_input("图标 (Emoji)", value="🍔")
+            
+            if st.form_submit_button("➕ 添加预算计划"):
+                if add_budget(b_name, b_cat, b_amt, b_color, b_icon):
+                    st.success("添加成功！")
+                    st.rerun()
+
+        # List Existing Budgets
+        st.divider()
+        st.markdown("##### 📜 已有预算清单")
+        curr_budgets = get_budgets()
+        if curr_budgets:
+            for b in curr_budgets:
+                col_info, col_del = st.columns([4, 1])
+                with col_info:
+                    st.markdown(f"{b.get('icon','')} **{b['name']}** | {b['category']} | 预算: **${b['amount']}**")
+                with col_del:
+                    if st.button("删除", key=f"del_b_{b['id']}"):
+                        if delete_budget(b['id']):
+                            st.rerun()
+        else:
+            st.info("暂无预算，请添加。")
+
+    # --- 2. Recurring Expenses ---
+    with st.expander("🔄 固定开销 (Recurring Expenses)"):
+        st.caption("设置定期自动扣款规则（如房租、订阅费）。需配合 Cloudflare Cron Trigger 使用。")
+        
+        # Add New Rule
+        with st.form("add_recurring_form", clear_on_submit=True):
+            r1, r2, r3 = st.columns(3)
+            r_name = r1.text_input("名称", placeholder="例如：房租")
+            r_amt = r2.number_input("金额", min_value=0.0, step=100.0, value=2000.0)
+            r_cat = r3.selectbox("分类", options=["居住", "餐饮", "日用品", "交通", "其他"]) # Manual '居住' might not strictly match but let's allow "其他" or expand list
+            
+            r4, r5 = st.columns(2)
+            r_freq = r4.selectbox("频率", options=["weekly", "monthly", "yearly"])
+            
+            r_day_help = "Weekly: 1=周一...7=周日; Monthly: 1-31; Yearly: Day of Year (1-366)"
+            r_day = r5.number_input("日期/星期 (Day)", min_value=1, max_value=366, value=1, help=r_day_help)
+            
+            if st.form_submit_button("➕ 添加固定规则"):
+                if add_recurring(r_name, r_amt, r_cat, r_freq, r_day):
+                    st.success("添加成功！")
+                    st.rerun()
+        
+        # List Existing Rules
+        st.divider()
+        st.markdown("##### 📜 运行中的规则")
+        curr_rules = get_recurring_rules()
+        if curr_rules:
+            for r in curr_rules:
+                active_icon = "🟢" if r['active'] else "🔴"
+                freq_map = {"weekly": "每周", "monthly": "每月", "yearly": "每年"}
+                day_str = f"第 {r['day']} 天"
+                if r['frequency'] == 'weekly':
+                    week_map = {1:"周一", 2:"周二", 3:"周三", 4:"周四", 5:"周五", 6:"周六", 7:"周日"}
+                    day_str = week_map.get(r['day'], str(r['day']))
+                elif r['frequency'] == 'monthly':
+                    day_str = f"{r['day']}号"
+                
+                col_r_info, col_r_del = st.columns([4, 1])
+                with col_r_info:
+                    st.markdown(f"{active_icon} **{r['name']}** (${r['amount']}) - {freq_map.get(r['frequency'], r['frequency'])} {day_str} | 上次运行: {r.get('last_run_date', '无')}")
+                with col_r_del:
+                    if st.button("删除", key=f"del_r_{r['id']}"):
+                        if delete_recurring(r['id']):
+                            st.rerun()
+        else:
+            st.info("暂无规则。")
+        
+        # Manual Trigger Button (For testing)
+        if st.button("🛠️ 手动触发检查 (立即运行)"):
+            try:
+                chk = requests.get(f"{API_URL}/recurring/check", headers={"X-API-Key": API_KEY}, timeout=10)
+                res = chk.json()
+                st.success(f"检查完成，新增 {res.get('processed', 0)} 条记录")
+                time.sleep(1)
+                st.cache_data.clear()
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error: {e}")
+
+    # --- 3. Danger Zone (Moved here) ---
+    with st.expander("🚨 危险区域 (Danger Zone)"):
+        st.warning("清空所有数据，不可恢复！")
+        confirm_clear = st.checkbox("确认清空所有数据")
+        if st.button("💣 清空数据", type="secondary"):
+            if confirm_clear:
+                requests.post(f"{API_URL}/clear", headers={"X-API-Key": API_KEY})
+                st.cache_data.clear()
+                st.rerun()
+            else:
+                st.error("请先确认")
+
