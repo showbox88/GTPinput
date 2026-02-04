@@ -1,119 +1,99 @@
 # GTPinput
 GPT智能记录日常开支
-# GPT 记账系统（GPT → Make → Google Sheets → Streamlit）
 
 这是一个由 GPT 驱动的个人记账与可视化系统，支持自然语言记账、自动分类、实时汇总，并通过 Streamlit 提供手机/电脑友好的可视化 Dashboard。
 
-系统设计遵循「**数据层稳定、逻辑层可替换、展示层可演进**」的原则，适合长期使用与持续扩展。
+**最新架构 (v2.0)**：GPT (输入) → Cloudflare Worker (API) → D1 Database (SQLite) → Streamlit (可视化)
 
 ---
 
 ## 一、系统能力概览
 
-- ✅ 自然语言 / 语音记账（GPT）
-- ✅ 自动结构化（日期 / 分类 / 金额 / 状态）
-- ✅ 自动写入 Google Sheets（Make）
-- ✅ 数据清洗与口径统一（Ledger_Clean）
-- ✅ 月 / 年 / 分类自动汇总
-- ✅ Streamlit Dashboard（趋势图 / 饼图 / KPI）
-- ✅ 手机、电脑均可访问
-- ✅ 完全免费方案（Streamlit Community Cloud）
+- ✅ **自然语言 / 语音记账**：GPT 自动提取金额、分类、日期、备注。
+- ✅ **API 驱动**：使用 Cloudflare Worker + D1，响应速度极快，无需 Google Sheets。
+- ✅ **全功能仪表盘**：
+    - **KPI 概览**：本月/今年支出、筛选合计、记录笔数。
+    - **可视化图表**：月度趋势柱状图、分类占比饼图。
+    - **交互式表格**：支持按月/分类筛选。
+- ✅ **数据管理能力**：
+    - **编辑**：直接在表格中修改金额、分类、日期等。
+    - **删除**：支持勾选多条记录一键删除。
+    - **清空**：提供“Danger Zone”一键清空所有数据功能。
+- ✅ **移动端适配**：针对手机屏幕优化的 UI 布局和交互。
 
 ---
 
 ## 二、整体架构
 
-GPT（输入层）
-↓
-Make（执行层 / Webhook）
-↓
-Google Sheets（数据层）
-├─ Ledger_Raw 原始记录（唯一写入点）
-├─ Ledger_Clean 清洗与派生（公式）
-├─ Summary_* 汇总视图
-↓
-Streamlit（展示层）
-
-
----
-
-## 三、数据表结构
-
-### 1️⃣ Ledger_Raw（原始数据表）
-> Make 写入的唯一表，禁止手工公式
-
-| 列名 | 说明 |
-|---|---|
-| 日期 | 允许 date 或文本 YYYY-MM-DD |
-| 项目 | 消费内容 |
-| 金额 | 数值 |
-| 货币 | 如 CNY |
-| 分类 | GPT 自动分类 |
-| 备注 | 可选 |
-| 记录来源 | GPT / 手动 |
-| 创建时间 | ISO 时间 |
-| 状态 | normal / pending / invalid |
+```mermaid
+graph TD
+    User(用户/GPT) -->|POST /add| API(Cloudflare Worker)
+    API -->|SQL| DB[(Cloudflare D1 SQLite)]
+    
+    Streamlit(Streamlit Dashboard) -->|GET /list| API
+    Streamlit -->|POST /update| API
+    Streamlit -->|POST /delete| API
+    Streamlit -->|POST /clear| API
+    
+    API -->|JSON| Streamlit
+```
 
 ---
 
-### 2️⃣ Ledger_Clean（清洗表）
-> 全部由公式生成，不手写数据
+## 三、API 接口 (Cloudflare Worker)
 
-核心逻辑：
-- 统一日期格式（兼容文本日期）
-- 派生：年、月
-- 是否有效：`status == normal`
-- 有效金额：仅 normal 计入
+所有数据操作均通过 API 进行，确保前后端分离。需要传递 `X-API-Key` 进行鉴权。
 
----
-
-### 3️⃣ Summary_*（汇总表）
-- `Summary_Month`：按月汇总
-- `Summary_Category`：按分类汇总
-- `Summary_Year`：按年度汇总
-
-全部使用 **Ledger_Clean** 作为唯一统计来源。
+| 方法 | 路径 | 描述 | 参数示例 |
+|---|---|---|---|
+| `POST` | `/add` | 新增记录 | `{"amount": 25, "item": "咖啡", "category": "餐饮"}` |
+| `GET` | `/list` | 获取所有记录 | 无 |
+| `POST` | `/update` | 更新记录 | `{"id": 12, "amount": 30, ...}` |
+| `POST` | `/delete` | 删除记录 | `{"id": 12}` |
+| `POST` | `/clear` | 清空所有数据 | 无 (需谨慎) |
 
 ---
 
-## 四、Streamlit Dashboard
+## 四、Streamlit Dashboard 功能细节
 
-- 数据源：`Ledger_Clean`
-- 支持：
-  - 本月 / 今年 KPI
-  - 月度趋势折线图
-  - 分类占比饼图（Donut）
-  - 最近记录表
-  - 月份 / 分类筛选
-  - 手动刷新（30 秒缓存）
+1.  **KPI 卡片**
+    - `📅 本月支出`：实时计算当月总支出。
+    - `🗓️ 今年支出`：累计年度总支出。
+    - `🔍 当前筛选合计`：随侧边栏筛选条件动态变化。
+    
+2.  **图表分析**
+    - **月度趋势 (柱状图)**：直观展示每月消费高低，柱条上方显示具体金额。
+    - **分类占比 (饼图)**：清晰展示钱花哪儿了。
 
-部署方式：
-- GitHub Public Repo
-- Streamlit Community Cloud
-- `requirements.txt`：`streamlit`, `pandas`, `plotly`
+3.  **最近记录管理 (Edit & Delete)**
+    - **修改**：直接点击表格单元格进行编辑，点击“保存修改”生效。
+    - **删除**：勾选表格左侧的 `🗑️` 复选框，按钮变为红色确认状态，点击即可删除。
 
----
-
-## 五、刷新与实时性
-
-- 使用 `@st.cache_data(ttl=30)`
-- 提供「立即刷新」按钮
-- 实时性：**几秒 ~ 30 秒**
+4.  **危险操作区 (Danger Zone)**
+    - 位于页面最底部，需勾选确认框后才能点击“💣 立即清空所有数据”。
 
 ---
 
-## 六、删除 / 修改数据原则
+## 五、部署与配置
 
-- 删除测试数据：直接删除 `Ledger_Raw` 整行（安全）
-- 排除记录：将 `状态` 改为 `invalid`
-- 永不在 Ledger_Clean / Summary 中手动编辑数据
+### 1. Cloudflare Worker
+- 代码位于 `worker/index.js`。
+- 使用 `wrangler deploy` 部署。
+- 绑定 D1 数据库 `expense_db`。
+
+### 2. Streamlit App
+- 代码位于 `app.py`。
+- 本地运行：`streamlit run app.py`
+- 配置文件 `.streamlit/secrets.toml`：
+    ```toml
+    [general]
+    API_URL = "https://your-worker.workers.dev"
+    API_KEY = "your-secret-key"
+    ```
 
 ---
 
-## 七、当前状态
-
-- 系统已稳定运行
-- 数据链路打通
-- UI 已完成第一版
-- 可进入功能增强阶段
-
+## 六、未来计划
+- [ ] 预算设置与超支提醒
+- [ ] 多账户/多用户支持
+- [ ] 导出 CSV/Excel 功能

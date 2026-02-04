@@ -1,128 +1,78 @@
-A lightweight, AI-first daily expense tracking system designed for speed, clarity, and long-term extensibility.
+# GTPinput
+A lightweight, AI-first daily expense tracking system.
+
+This project uses **GPT** for natural language input, **Cloudflare Worker** for a high-performance API, **D1 (SQLite)** for storage, and **Streamlit** for a beautiful, mobile-friendly dashboard.
+
+**Current Architecture (v2.0)**: GPT → Cloudflare Worker API → D1 Database → Streamlit
 
 ---
 
 ## ✨ Features
 
-- Natural language expense input via Custom GPT
-- Fast database writes (no Google Sheets / Make)
-- SQLite-based storage
-- Web dashboard for management and visualization
-- Local & cloud-friendly architecture
+- **🗣️ AI-Powered Entry**: Just say "Lunch $20", and GPT parses the amount, category, and date.
+- **⚡ Fast API**: Built on Cloudflare Workers and D1 SQLite for low latency.
+- **📱 Mobile-First Dashboard**:
+    - **KPIs**: Real-time tracking of Monthly, Yearly, and Filtered expenses.
+    - **Visualizations**: Monthly Bar Charts and Category Pie Charts.
+    - **Interactive Table**: Edit or Delete records directly from the UI.
+- **🛡️ Data Management**:
+    - **Edit**: Inline editing of expense details.
+    - **Delete**: Batch delete via checkbox selection.
+    - **Clear All**: dedicated "Danger Zone" to securely wipe all data.
 
 ---
 
 ## 🧠 Architecture Overview
 
-Custom GPT
-↓ tool call
-Cloudflare Worker (API)
-↓
-SQLite Database
-↓
-Streamlit Dashboard
-
-
-Each layer is independent and replaceable.
+```mermaid
+graph LR
+    GPT[Custom GPT] -->|POST| API[Cloudflare Worker]
+    API <-->|SQL| DB[(D1 Database)]
+    User[Streamlit App] <-->|JSON| API
+```
 
 ---
 
-## 🤖 Custom GPT Logic
+## 🛠️ API Endpoints (Worker)
 
-The GPT acts as a **Daily Expense Assistant**.
+Powered by Cloudflare Workers. Requires `X-API-Key` header.
 
-### Trigger Rule
+- `POST /add`: Add a new expense record.
+- `GET /list`: Retrieve all expense records.
+- `POST /update`: Modifiy an existing record.
+- `POST /delete`: Remove a specific record by ID.
+- `POST /clear`: Delete ALL records (Requires confirmation).
 
-If user input contains a monetary amount (e.g. `22`, `22块`, `$22`), the GPT **automatically records an expense**.
+---
 
-### Tool Call Format
+## 📊 Streamlit App
 
-```json
-{
-  "amount": 22,
-  "category": "Food",
-  "description": "Lunch takeout",
-  "date": "2026-02-03"
-}
-☁️ Cloudflare Worker
-Responsibilities
-API-only service
+The frontend is built with Streamlit for simplicity and interactivity.
 
-Handles database operations
+### Key Sections:
+1.  **Filters**: Sidebar filters for Month and Category.
+2.  **Metrics**: Instant view of your financial health.
+3.  **Charts**:
+    - **Monthly Trend (Bar Chart)**: Compare spending across months easily.
+    - **Category Distribution (Pie Chart)**: See where your money goes.
+4.  **Management**:
+    - **One-click Delete**: Check the `🗑️` icon and confirm to delete.
+    - **Inline Edit**:Modify any field and save.
 
-No UI or AI logic
+### Local Development:
+1.  Install dependencies: `pip install streamlit pandas plotly requests`
+2.  Configure secrets in `.streamlit/secrets.toml`:
+    ```toml
+    [general]
+    API_URL = "https://your-worker-url"
+    API_KEY = "your-api-key"
+    ```
+3.  Run: `streamlit run app.py`
 
-Example Endpoints
-POST   /expense
-GET    /expenses?limit=200
-PUT    /expense/:id
-DELETE /expense/:id
-GET    /stats
-🗄️ Database Schema (SQLite)
-CREATE TABLE expenses (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  amount REAL NOT NULL,
-  category TEXT NOT NULL,
-  description TEXT,
-  date TEXT NOT NULL,
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-Design goals:
+---
 
-Flat schema
+## 🔮 Future Roadmap
 
-Easy migration
-
-AI-friendly structure
-
-📊 Streamlit Dashboard
-Features
-Expense list (edit / delete)
-
-Category summary
-
-Trend chart
-
-Pie chart
-
-Data Source
-All data is fetched via the Worker API
-
-Default view loads latest 200 records
-
-🖥️ Local Development
-Requirements
-Python 3.9+
-
-Streamlit
-
-Run
-streamlit run streamlit_app.py
-(Optional) run.bat is provided for automatic environment setup on Windows.
-
-🔮 Future Extensions
-Budget system
-
-Monthly AI-generated reports
-
-CSV / Excel export
-
-Multi-user support
-
-Mobile app frontend
-
-🧾 Design Philosophy
-Data-first
-
-AI as interface, not logic holder
-
-Minimal coupling
-
-Easy handover to humans or AI
-
-📌 Notes for Contributors / AI
-Do not introduce hidden logic
-
-Preserve fast write performance
-
-Keep schema backward-compatible
+- [ ] Budgeting limits and alerts.
+- [ ] Export data to CSV/Excel.
+- [ ] Multi-user support.
