@@ -266,7 +266,11 @@ with tab_dash:
                 yaxis_title="金额 ($)",
                 yaxis_tickprefix="$"
             )
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, key="chart_bar_1", on_select="ignore") # plotly_chart defaults to using container width in modern streamlit or needs config? 
+            # Actually, typically warning implies st.plotly_chart(..., use_container_width=True) -> st.plotly_chart(..., width=None) or similar? 
+            # Wait, the warning said: "For `use_container_width=True`, use `width='stretch'`".
+            # So:
+            st.plotly_chart(fig_bar, width="stretch")
         else:
             st.warning("暂无月度数据")
 
@@ -284,7 +288,7 @@ with tab_dash:
                     showlegend=False
                 )
                 fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_pie, use_container_width=True)
+                st.plotly_chart(fig_pie, width="stretch")
         else:
             st.warning("暂无分类数据")
 
@@ -319,7 +323,9 @@ with tab_dash:
             df_editor[final_cols],
             column_config=column_config,
             hide_index=True,
-            use_container_width=True,
+            use_container_width=True, # data_editor still uses use_container_width in many docs, but warning may apply here due to new st.dataframe logic.
+            # Let's try matching the warning exactly for data_editor if it is indeed the source.
+            width="stretch",
             num_rows="fixed",
             key="expense_editor"
         )
@@ -514,7 +520,7 @@ with tab_settings:
                 df_rules[r_show_cols],
                 column_config=r_col_config,
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
                 key="recurring_editor"
             )
             
