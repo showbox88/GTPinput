@@ -198,6 +198,36 @@ with tab_dash:
         if "月(yyyy-mm)" in df_budget_calc.columns:
             df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == target_month_for_budget]
         
+        # Helper for Custom Progress Bar
+        def render_budget_card(name, icon, amount, limit, color):
+            pct = (amount / limit) if limit > 0 else 0
+            pct_disp = min(pct * 100, 100)
+            
+            # Color logic: if over budget, turn red-ish, effectively overridden by user color usually, 
+            # but let's stick to user color for the bar, maybe showing warning text.
+            bar_color = color
+            bg_color = "#f0f2f6" # streamline default gray
+            
+            # HTML for custom bar
+            # Height: 24px (taller), Radius: 12px
+            html = f"""
+            <div style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: 500;">
+                    <span>{icon} {name}</span>
+                    <span style="color: #555;">${amount:,.0f} / ${limit:,.0f}</span>
+                </div>
+                <div style="background-color: {bg_color}; border-radius: 12px; height: 24px; width: 100%; overflow: hidden;">
+                    <div style="background-color: {bar_color}; width: {pct_disp}%; height: 100%; border-radius: 12px; transition: width 0.5s;"></div>
+                </div>
+                <div style="text-align: right; font-size: 0.8rem; color: #666; margin-top: 2px;">
+                    使用率: {pct:.1%}
+                </div>
+            </div>
+            """
+            st.markdown(html, unsafe_allow_html=True)
+            if pct > 1.0:
+               st.caption(f"⚠️ **已超支 {pct-1:.1%}**")
+
         # Display in columns of 3
         b_cols = st.columns(3)
         for i, b in enumerate(budgets):
@@ -213,14 +243,7 @@ with tab_dash:
                 if "分类" in df_budget_calc.columns and "有效金额" in df_budget_calc.columns:
                     spent = df_budget_calc[df_budget_calc["分类"] == b_cat]["有效金额"].sum()
                 
-                pct = (spent / b_limit) if b_limit > 0 else 0
-                pct_disp = min(pct, 1.0)
-                
-                # Custom progress bar label
-                st.caption(f"{b_icon} **{b_name}** ({b_cat})")
-                st.progress(pct_disp, text=f"${spent:,.0f} / ${b_limit:,.0f} ({pct:.1%})")
-                if pct > 1.0:
-                    st.warning(f"⚠️ 已超支 {pct-1:.1%}")
+                render_budget_card(b_name, b_icon, spent, b_limit, b_color)
 
     st.divider()
 
