@@ -206,20 +206,22 @@ with tab_dash:
             # Color logic: if over budget, turn red-ish, effectively overridden by user color usually, 
             # but let's stick to user color for the bar, maybe showing warning text.
             bar_color = color
-            bg_color = "#f0f2f6" # streamline default gray
+            # Dark mode friendly track: semi-transparent white looks good on dark backgrounds
+            bg_color = "rgba(255, 255, 255, 0.1)" 
             
             # HTML for custom bar
             # Height: 24px (taller), Radius: 12px
+            # Removed explicit text colors causing visibility issues in dark mode
             html = f"""
             <div style="margin-bottom: 15px;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: 500;">
                     <span>{icon} {name}</span>
-                    <span style="color: #555;">${amount:,.0f} / ${limit:,.0f}</span>
+                    <span style="opacity: 0.8;">${amount:,.0f} / ${limit:,.0f}</span>
                 </div>
                 <div style="background-color: {bg_color}; border-radius: 12px; height: 24px; width: 100%; overflow: hidden;">
                     <div style="background-color: {bar_color}; width: {pct_disp}%; height: 100%; border-radius: 12px; transition: width 0.5s;"></div>
                 </div>
-                <div style="text-align: right; font-size: 0.8rem; color: #666; margin-top: 2px;">
+                <div style="text-align: right; font-size: 0.8rem; opacity: 0.7; margin-top: 2px;">
                     使用率: {pct:.1%}
                 </div>
             </div>
