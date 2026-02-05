@@ -3,14 +3,21 @@ GPT智能记录日常开支
 
 这是一个由 GPT 驱动的个人记账与可视化系统，支持自然语言记账、自动分类、实时汇总，并通过 Streamlit 提供手机/电脑友好的可视化 Dashboard。
 
-**最新架构 (v2.0)**：GPT (输入) → Cloudflare Worker (API) → D1 Database (SQLite) → Streamlit (可视化)
+**最新架构 (v3.0)**：
+- **记账**: Streamlit Chat UI (输入) → OpenAI (解析) → Cloudflare Worker (API) → D1 Database
+- **文档**: Streamlit File Uploader → OpenAI (识图) → Google Drive/Sheets/Calendar (归档)
 
 ---
 
 ## 一、系统能力概览
 
-- ✅ **自然语言 / 语音记账**：GPT 自动提取金额、分类、日期、备注。
-- ✅ **API 驱动**：使用 Cloudflare Worker + D1，响应速度极快，无需 Google Sheets。
+- ✅ **智能交互助手 (New)**：集成 Chat 界面，支持：
+    - **记账**: "午饭 30"
+    - **查询**: "上个月花了多少？", "查一下买水果的记录"
+    - **删除**: "删除上一条", "删除买烟的记录"
+- ✅ **智能文档归档 (New)**：集成 SmartDoc 核心引擎，上传发票/证件照片，自动识别并上传至 Google Drive，写入 Google Sheets 和 Calendar。
+- ✅ **收据自动记账 (New)**：上传收据图片时，自动提取金额并记入账本。
+- ✅ **API 驱动**：使用 Cloudflare Worker + D1，响应速度极快，无需 Google Sheets（记账数据）。
 - ✅ **全功能仪表盘**：
     - **KPI 概览**：本月/今年支出、筛选合计、记录笔数。
     - **可视化图表**：月度趋势柱状图、分类占比饼图。

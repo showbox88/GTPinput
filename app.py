@@ -4,6 +4,17 @@ import streamlit as st
 import plotly.express as px
 
 import requests
+import json
+import os
+import tempfile
+import expense_chat
+# Using Try-Except for optional modules to prevent crash if setup isn't perfect yet
+try:
+    from modules.ai_factory import AIProcessor
+    from modules.google_service import GoogleService
+    from config.rules import FOLDER_MAP, generate_filename
+except ImportError:
+    pass
 
 # ====== 配置 (从 secrets 读取) ======
 # 需要在 .streamlit/secrets.toml 中配置 API_URL 和 API_KEY
@@ -12,6 +23,8 @@ API_KEY = st.secrets["general"]["API_KEY"]
 
 # ====== Constants ======
 CATEGORIES = ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "居住", "其他"]
+# Initialize df globally to prevent NameError if load_data fails or scoping issues occur
+df = pd.DataFrame()
 
 
 
@@ -126,10 +139,187 @@ def delete_recurring(rid):
 # Main App Layout with Tabs
 # ==========================================
 
-tab_dash, tab_settings = st.tabs(["📊 仪表盘 (Dashboard)", "⚙️ 管理与设置 (Settings)"])
+# ====== DATA LOADING ======
+# Load data EARLIER so that Chat Logic (in Tab 0) can use it for context!
+df = load_data()
+
+tab_chat, tab_dash, tab_settings = st.tabs(["💬 智能输入 (Smart Input)", "📊 仪表盘 (Dashboard)", "⚙️ 管理与设置 (Settings)"])
+
+# ==========================
+# TAB 0: SMART INPUT (CHAT)
+# ==========================
+with tab_chat:
+    st.header("💡 智能助手 (Expense & Docs)")
+    st.caption("您可以直接输入消费记录（如: 午饭20元），或者上传单据/证件进行归档。")
+    
+    # --- 1. File Uploader (SmartDoc) ---
+    with st.expander("📎 上传文档/证件/单据 (Archive Document)", expanded=False):
+        uploaded_file = st.file_uploader("选择文件 (PDF/Image)", type=["png", "jpg", "jpeg", "webp", "pdf"])
+        if uploaded_file:
+            if st.button("🚀 开始分析与归档"):
+                with st.status("正在处理...", expanded=True) as status:
+                    # Save to temp
+                    tfile = tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}")
+                    tfile.write(uploaded_file.read())
+                    tfile.close()
+                    temp_path = tfile.name
+                    
+                    status.write("🤖 正在调用 AI 进行识别...")
+                    try:
+                        ai = AIProcessor()
+                        res = ai.analyze_image(temp_path)
+                        
+                        if res.get("type") == "ERROR":
+                            st.error(f"识别失败: {res.get('name')}")
+                        else:
+                            st.success("识别成功！")
+                            st.json(res)
+                            
+                            status.write("📂 正在归档到 Google Drive...")
+                            # Prepare data for upload
+                            save_data = res.copy()
+                            save_data['original_filename'] = uploaded_file.name
+                            save_data['temp_path'] = temp_path
+                            save_data['extension'] = uploaded_file.name.split('.')[-1]
+                            save_data['name'] = res.get('name', 'Unknown')
+                            
+                            # Upload
+                            gs = GoogleService()
+                            # Guess folder name mapping from type
+                            folder_hint = FOLDER_MAP.get(res.get('type'), FOLDER_MAP["OTHER"])
+                            
+                            # Generate Name
+                            new_name = generate_filename(save_data)
+                            
+                            link = gs.upload_file(temp_path, new_name, folder_hint)
+                            status.write(f"✅ 已上传: {link}")
+                            
+                            # Sheet & Calendar
+                            status.write("📊 更新 Google Sheet & Calendar...")
+                            sheet_row = [
+                                str(pd.Timestamp.today().date()),
+                                save_data.get('name'),
+                                save_data.get('type'),
+                                save_data.get('doc_id'),
+                                save_data.get('expiry_date'),
+                                "N/A", # reminder days not asked in simplified flow yet
+                                "Skipped",
+                                link
+                            ]
+                            gs.append_to_sheet(sheet_row)
+                            
+                            # --- NEW: Sync to Expense DB ---
+                            try:
+                                extract_amt = save_data.get('amount', 0)
+                                if isinstance(extract_amt, (int, float)) and extract_amt > 0:
+                                    status.write(f"💰 同步记账中 (${extract_amt})...")
+                                    # Synthetic Text: "Name Amount Category Note Source:SmartDoc"
+                                    # Note: category from SmartDoc might be English (e.g. Food), maybe map it or let backend handle '其他'
+                                    s_item = save_data.get('name', 'SmartDoc Item')
+                                    s_cat = save_data.get('category', '其他')
+                                    s_date = pd.Timestamp.today().strftime("%Y-%m-%d") # or extract date from doc?
+                                    
+                                    syn_text = f"{s_item} {extract_amt} {s_cat} SmartDoc-Auto-Sync Date:{s_date}"
+                                    
+                                    requests.post(f"{API_URL}/add", json={"text": syn_text, "source": "smart_doc_upload"}, headers={"X-API-Key": API_KEY})
+                                    st.success(f"💰 已同步至账本: {s_item} ${extract_amt}")
+                                    st.session_state["data_changed"] = True
+                            except Exception as e_sync:
+                                print(f"Sync error: {e_sync}")
+                                status.write(f"⚠️ 记账同步部分失败: {e_sync}")
+                            
+                            if save_data.get('expiry_date') != "N/A":
+                                gs.add_calendar_reminder(f"{save_data['name']} {save_data['type']}", save_data['expiry_date'], 7) # Default 7 days reminder
+                                
+                            status.update(label="🎉 归档完成！", state="complete", expanded=False)
+                            st.balloons()
+                            
+                    except Exception as e:
+                        st.error(f"处理出错: {e}")
+                    
+                    # Cleanup? OS remove handled in upload_file or manual?
+                    # Python tempfile might need manual removal if delete=False
+                    try:
+                        os.remove(temp_path)
+                    except:
+                        pass
+
+    st.divider()
+
+    # --- 2. Chat Interface (Expenses) ---
+    if "messages" not in st.session_state:
+        st.session_state.messages = [{"role": "assistant", "content": "你好！我是你的记账助手。请告诉我花了什么钱？"}]
+
+    for msg in st.session_state.messages:
+        st.chat_message(msg["role"]).write(msg["content"])
+
+    if prompt := st.chat_input("输入消费 (例如: 打车 50)"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.chat_message("user").write(prompt)
+        
+        # Process
+        with st.spinner("思考中..."):
+            # Pass the FULL dataframe to the chat engine so it can query/delete
+            result = expense_chat.process_user_message(prompt, df)
+            
+            intent_type = result.get("type", "chat")
+            
+            # 1. Handle Chat/Query Reply
+            if "reply" in result:
+                ai_reply = result["reply"]
+                st.session_state.messages.append({"role": "assistant", "content": ai_reply})
+                st.chat_message("assistant").write(ai_reply)
+            
+            # 2. Handle Record Intent
+            if intent_type == "record":
+                exp = result
+                # Note: 'item' might be in result directly
+                item_str = exp.get('item', 'Unknown')
+                amt_str = str(exp.get('amount', 0))
+                
+                try:
+                    # Construct synthetic text for backend
+                    date_str = exp.get('date', pd.Timestamp.today().strftime("%Y-%m-%d"))
+                    cat_str = exp.get('category', '其他')
+                    note_str = exp.get('note', '')
+                    synthetic_text = f"{item_str} {amt_str} {cat_str} {note_str} Date:{date_str}"
+                    
+                    payload = {"text": synthetic_text, "source": "chat_ui"}
+                    resp = requests.post(f"{API_URL}/add", json=payload, headers={"X-API-Key": API_KEY})
+                    
+                    if resp.status_code == 200:
+                        st.success(f"✅ 已记录: {item_str} ${amt_str}")
+                        st.session_state["data_changed"] = True 
+                    else:
+                        st.error(f"记录失败: {resp.text}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
+            # 3. Handle Delete Intent
+            elif intent_type == "delete":
+                del_id = result.get("id")
+                if del_id:
+                    try:
+                        resp = requests.post(f"{API_URL}/delete", json={"id": int(del_id)}, headers={"X-API-Key": API_KEY})
+                        if resp.status_code == 200:
+                             st.success(f"🗑️ 已删除记录 ID: {del_id}")
+                             st.session_state["data_changed"] = True
+                        else:
+                             st.error(f"删除失败: {resp.text}")
+                    except Exception as e:
+                        st.error(f"Error deleting: {e}")
+
+    if st.session_state.get("data_changed"):
+        st.cache_data.clear()
+        del st.session_state["data_changed"]
+        # Trigger minimal rerun?
+        time.sleep(1)
+        st.rerun()
+
 
 # ====== DATA LOADING ======
-df = load_data()
+# Already loaded above.
+# df = load_data()
 
 # ====== SIDEBAR FILTERS (Shared effect) ======
 st.sidebar.header("筛选 (Filter)")
