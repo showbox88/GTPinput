@@ -296,8 +296,11 @@ with tab_chat:
                 if u_file: final_file = u_file
                 
             with tab_cam:
-                c_file = st.camera_input("拍照", label_visibility="collapsed")
-                if c_file: final_file = c_file
+                # Lazy load to prevent immediate permission request
+                if st.checkbox("🔌 启动相机 (Start Camera)", key="enable_camera"):
+                    st.caption("📱 **提示**：如需切换前后镜头，请使用相机画面上的翻转按钮")
+                    c_file = st.camera_input("拍照", label_visibility="collapsed")
+                    if c_file: final_file = c_file
 
             if final_file:
                 # Show preview if image
