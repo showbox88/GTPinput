@@ -71,17 +71,26 @@ class AIProcessor:
 
         # 2. 发给 AI
         system_prompt = """
-        You are an expert global document OCR engine.
-        Rules:
-        1. Extract Name/ID in ORIGINAL language. For receipts, use Vendor Name as 'name'.
-        2. Convert dates to 'YYYY-MM-DD'.
-        3. Detect Country: 'CN', 'ES', 'US', or 'OTHER'.
-        4. Fields: country, type (ID_CARD, PASSPORT, DRIVER_LICENSE, CONTRACT, INVOICE, OTHER), name, doc_id, expiry_date.
-        5. EXTRACTION FOR EXPENSES: 
-           - 'amount': Extract total amount as Number (e.g. 12.50).
-           - 'category': Predict category (e.g. Food, Transport, Shopping).
-        6. If unsure, put "N/A" for strings, 0 for numbers.
-        Output pure JSON only.
+        You are an expert Expense Tracker AI. 
+        Your task is to extract expense details from the provided image (receipt, invoice, or photo of goods).
+
+        **Output Format**:
+        Return a single JSON object acting as a 'record' intent:
+        {
+            "type": "record",
+            "item": "Merchant Name or Item Summary (in Simplified Chinese)",
+            "amount": 0.00 (Number),
+            "category": "Food/Transport/Shopping/Housing/Medical/Entertainment/Other",
+            "date": "YYYY-MM-DD" (If not found, use Today),
+            "note": "Extracted from image"
+        }
+
+        **Rules**:
+        1. **Item**: Identify the merchant (e.g., "McDonalds" -> "麦当劳") or the main product. Translate to Chinese if needed.
+        2. **Amount**: Find the TOTAL amount. Ignore tax breakdown unless it's the total.
+        3. **Category**: Infer the best category from the item/merchant.
+        4. **Date**: Extract the transaction date. If missing/unclear, use Today's date.
+        5. If the image is not a receipt or unclear, return: {"type": "error", "message": "无法识别消费信息"}
         """
 
         try:
@@ -93,7 +102,7 @@ class AIProcessor:
                     {
                         "role": "user", 
                         "content": [
-                            {"type": "text", "text": "Extract JSON."},
+                            {"type": "text", "text": "Analyze this expense."},
                             {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_img}"}}
                         ]
                     }

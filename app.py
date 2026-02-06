@@ -255,6 +255,44 @@ with tab_chat:
              st.session_state.messages = [{"role": "assistant", "content": welcome_txt}]
              st.rerun()
 
+    # --- 0. Draft Expense Confirmation (From Camera/Upload) ---
+    if "draft_expense" in st.session_state:
+        draft = st.session_state["draft_expense"]
+        with st.expander("📝 确认记账信息 (Confirm Receipt)", expanded=True):
+            cols = st.columns([2, 1])
+            with cols[0]:
+                st.info(f"**{draft.get('item')}**")
+                st.caption(f"分类: {draft.get('category')} | 日期: {draft.get('date')}")
+            with cols[1]:
+                st.metric("金额 (CNY)", f"{draft.get('amount')}")
+            
+            st.text_area("备注 (Note)", value=draft.get('note', ''), key="draft_note", disabled=True)
+            
+            c1, c2 = st.columns(2)
+            if c1.button("✅ 确认保存 (Save)", type="primary", use_container_width=True):
+                # Construct the text for the /add API
+                # Format: "Item Amount Category Date:YYYY-MM-DD Note:..."
+                text_payload = f"{draft.get('item')} {draft.get('amount')} {draft.get('category')} Date:{draft.get('date')} Note:{draft.get('note')}"
+                
+                try:
+                    with st.spinner("Saving..."):
+                        requests.post(
+                            f"{API_URL}/add", 
+                            json={"text": text_payload, "source": "camera_receipt"}, 
+                            headers={"X-API-Key": API_KEY}
+                        )
+                        st.success("已保存！")
+                        del st.session_state["draft_expense"]
+                        st.session_state["data_changed"] = True
+                        st.session_state.messages.append({"role": "assistant", "content": f"✅ 已为您记录: {draft.get('item')} {draft.get('amount')}元"})
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"保存失败: {e}")
+
+            if c2.button("❌ 放弃 (Cancel)", use_container_width=True):
+                del st.session_state["draft_expense"]
+                st.rerun()
+
     # --- 1. Scrollable Chat Container (Fixed Height) ---
     chat_container = st.container(height=500)
     
@@ -320,66 +358,37 @@ with tab_chat:
                         
                         status.write("🤖 AI 识别中...")
                         try:
+                            # 1. Analyze Image
                             ai = AIProcessor()
                             res = ai.analyze_image(temp_path)
                             
-                            if res.get("type") == "ERROR":
-                                st.error(f"识别失败: {res.get('name')}")
+                            if res.get("type").lower() == "error":
+                                st.error(f"识别失败: {res.get('message')}")
                             else:
-                                st.success("识别成功")
+                                # 2. Show Result & Confirm
+                                status.update(label="✅ 识别成功！请确认详情", state="complete", expanded=True)
                                 
-                                # Prepare data for upload
-                                save_data = res.copy()
-                                save_data['original_filename'] = fname
-                                save_data['temp_path'] = temp_path
-                                save_data['extension'] = fname.split('.')[-1]
-                                save_data['name'] = res.get('name', 'Unknown')
+                                # Display the extracted data
+                                col_img, col_info = st.columns([1, 2])
+                                with col_img:
+                                    st.image(temp_path, caption="原始凭证", width=150)
                                 
-                                # Upload
-                                gs = GoogleService()
-                                folder_hint = FOLDER_MAP.get(res.get('type'), FOLDER_MAP["OTHER"])
-                                new_name = generate_filename(save_data)
-                                
-                                link = gs.upload_file(temp_path, new_name, folder_hint)
-                                
-                                # Sheet & Calendar
-                                sheet_row = [
-                                    str(pd.Timestamp.today().date()),
-                                    save_data.get('name'),
-                                    save_data.get('type'),
-                                    save_data.get('doc_id'),
-                                    save_data.get('expiry_date'),
-                                    "N/A", 
-                                    "Skipped",
-                                    link
-                                ]
-                                gs.append_to_sheet(sheet_row)
-                                
-                                # Sync to Expense
-                                try:
-                                    extract_amt = save_data.get('amount', 0)
-                                    if isinstance(extract_amt, (int, float)) and extract_amt > 0:
-                                        s_item = save_data.get('name', 'SmartDoc Item')
-                                        s_cat = save_data.get('category', '其他')
-                                        s_date = pd.Timestamp.today().strftime("%Y-%m-%d")
-                                        syn_text = f"{s_item} {extract_amt} {s_cat} SmartDoc-Auto-Sync Date:{s_date}"
-                                        requests.post(f"{API_URL}/add", json={"text": syn_text, "source": "smart_doc_upload"}, headers={"X-API-Key": API_KEY})
-                                        st.caption(f"💰 已同步账本: ${extract_amt}")
-                                        st.session_state["data_changed"] = True
-                                except:
-                                    pass
-                                
-                                if save_data.get('expiry_date') != "N/A":
-                                    gs.add_calendar_reminder(f"{save_data['name']} {save_data['type']}", save_data['expiry_date'], 7)
+                                with col_info:
+                                    st.markdown(f"**商户/项目**: {res.get('item', '未知')}")
+                                    st.markdown(f"**金额**: `{res.get('amount', 0)}`")
+                                    st.markdown(f"**分类**: {res.get('category', 'General')}")
+                                    st.caption(f"日期: {res.get('date')} | 备注: {res.get('note')}")
                                     
-                                status.update(label="✅ 归档完成", state="complete", expanded=False)
-                                
-                                # Post message to chat
-                                st.session_state.messages.append({"role": "assistant", "content": f"✅ 文件 **{save_data['name']}** 已成功归档！[查看连接]({link})"})
-                                st.rerun()
+                                    # Save to Session State for external processing
+                                    st.session_state["draft_expense"] = res
+                                    st.rerun()
 
                         except Exception as e:
-                            st.error(f"Error: {e}")
+                            st.error(f"处理出错: {e}")
+                        finally:
+                            # Cleanup
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
                             st.exception(e) # More detailed error
                         
                         try:
