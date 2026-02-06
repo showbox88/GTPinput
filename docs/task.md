@@ -33,4 +33,6 @@
     - [x] UI: Dark Mode Compatibility for Progress Bars <!-- id: 44 -->
     - [x] UI: Harmonize Button Colors (Remove jarring Red) <!-- id: 45 -->
 - [x] Maintenance <!-- id: 46 -->
-    - [x] Fix Streamlit Deprecation Warnings (use_container_width) <!-- id: 47 -->
+- [x] Fix Streamlit Deprecation Warnings (use_container_width) <!-- id: 47 -->
+- [x] Enhancement <!-- id: 48 -->
+    - [x] Expose Update/Delete to GPT (OpenAPI Spec) <!-- id: 49 -->
