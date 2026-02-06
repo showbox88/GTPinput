@@ -5,50 +5,35 @@ This project is a daily expense tracking system designed for speed, decoupling, 
 
 ## Components
 
-### 1. User Interface (Input)
-- **Component**: Custom GPT
-- **Role**: Daily Expense Recording Assistant
-- **Responsibility**:
-    - Natural language processing
-    - Extracts `amount`, `category`, `description`, `date`
-    - Calls `addExpense` tool
-- **Constraint**: Stateless
+### 1. User Interface (Input & Dashboard)
+- **Component**: Streamlit App (`app.py`)
+- **Role**: Integrated Command Center
+- **Features**:
+    - **Smart Chat**: Local GPT-4o integration for NLP (Record/Query/Delete).
+    - **SmartDoc**: File Uploader -> GPT-4o Vision -> Archive & Expense Sync.
+    - **Dashboard**: Visual Analytics & CRUD operations.
 
 ### 2. API Layer & Execution
 - **Component**: Cloudflare Worker
-- **Role**: Pure API Layer
+- **Role**: Pure API Layer (REST)
 - **Responsibility**:
-    - CRUD operations
-    - No UI or AI logic
-- **Endpoints** (Typical):
-    - `POST /expense`
-    - `GET /expenses` (Note: Current implementation uses `/list`)
-    - `PUT /expense/:id`
-    - `DELETE /expense/:id`
-    - `GET /stats`
+    - CRUD operations (Add, List, Update, Delete)
+    - Budget & Recurring Rules management (V3.0)
+    - Authentication via `X-API-Key`
 
 ### 3. Data Storage
-- **Component**: SQLite (via Cloudflare D1 or similar)
-- **Schema**: `expenses` table
-    - `id`
-    - `amount`
-    - `category`
-    - `description`
-    - `date`
-    - `created_at`
-- **Design**: Flat schema, no nested JSON.
+- **Component**: Cloudflare D1 (SQLite)
+- **Tables**: `expenses`, `budgets`, `recurring_rules`
 
-### 4. Visualization (Frontend)
-- **Component**: Streamlit App
-- **Role**: Read-only Dashboard
-- **Responsibility**:
-    - Fetch data from API (No direct DB access)
-    - Visualization (Trends, Pie Charts)
-    - List view
-- **Current Implementation**: `app.py`
+### 4. External Services
+- **OpenAI**: NLP & Vision (Text parsing & Document analysis).
+- **Google Workspace**: Drive/Sheets/Calendar (Archiving only).
 
-## Data Flow
-User -> GPT -> (tool call) -> Cloudflare Worker -> SQLite -> Streamlit
+## Data Flow (V3.0)
+1. **Chat Recording**: `Streamlit` -> `OpenAI` (Parse) -> `Worker` (`/add`) -> `D1`.
+2. **Chat Query**: `Streamlit` (load DF) -> `OpenAI` (Answer based on context).
+3. **SmartDoc**: `Streamlit` (Upload) -> `OpenAI` (Vision) -> `Drive/Sheets` (Archive) + `Worker` (Sync Expense).
+4. **Dashboard**: `Streamlit` -> `Worker` (`/list`, `/budget/list`) -> `Pandas`.
 
 ## Constraints
 - Fast write path is critical.

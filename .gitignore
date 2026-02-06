@@ -3,3 +3,6 @@ debug_log.txt
 test_api.py
 __pycache__/
 *.pyc
+
+credentials.json
+token.json
