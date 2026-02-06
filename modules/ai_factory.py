@@ -4,11 +4,39 @@ import json
 import os
 import fitz  # PyMuPDF
 
+import streamlit as st
+
 class AIProcessor:
     def __init__(self, settings_path='config/settings.json'):
-        with open(settings_path, 'r', encoding='utf-8') as f:
-            self.config = json.load(f)
-        self.client = openai.OpenAI(api_key=self.config['openai_api_key'])
+        self.api_key = None
+        
+        # Priority 1: Streamlit Secrets (Cloud Environment)
+        try:
+            if "OPENAI_API_KEY" in st.secrets:
+                self.api_key = st.secrets["OPENAI_API_KEY"]
+                # Handle cases where user put it in [general] section
+            if not self.api_key and "general" in st.secrets and "OPENAI_API_KEY" in st.secrets["general"]:
+                 self.api_key = st.secrets["general"]["OPENAI_API_KEY"]
+        except FileNotFoundError:
+            pass # Secrets not found locally
+            
+        # Priority 2: Config File (Local Environment)
+        if not self.api_key:
+            try:
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    self.api_key = config.get('openai_api_key')
+            except:
+                pass
+        
+        # Priority 3: Environment Variable
+        if not self.api_key:
+            self.api_key = os.getenv("OPENAI_API_KEY")
+
+        if not self.api_key:
+             print("⚠️ Warning: No OpenAI API Key found!")
+
+        self.client = openai.OpenAI(api_key=self.api_key)
 
     def _pdf_to_image_base64(self, pdf_path):
         """将 PDF 第一页转为图片 Base64"""
