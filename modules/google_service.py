@@ -1,3 +1,4 @@
+import streamlit as st
 import os
 import json
 import datetime
@@ -15,34 +16,56 @@ SCOPES = [
 
 class GoogleService:
     def __init__(self, settings_path='config/settings.json'):
+        # 1. Loading Configuration (IDs)
         try:
-            with open(settings_path, 'r', encoding='utf-8') as f:
-                self.config = json.load(f)
+            if "google" in st.secrets:
+                self.config = {'google': st.secrets["google"]}
+            else:
+                with open(settings_path, 'r', encoding='utf-8') as f:
+                    self.config = json.load(f)
         except Exception as e:
             print(f"配置文件读取失败: {e}")
             raise
 
-        if not os.path.exists('credentials.json'):
-            raise FileNotFoundError("未找到 credentials.json！")
-
+        # 2. Loading Credentials
         creds = None
-        if os.path.exists('token.json'):
-            creds = Credentials.from_authorized_user_file('token.json', SCOPES)
         
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
+        # A. Try loading from Streamlit Secrets first
+        if "google_credentials" in st.secrets:
+             # Create credentials object from dict
+             creds_dict = dict(st.secrets["google_credentials"])
+             creds = Credentials.from_authorized_user_info(creds_dict, SCOPES)
+             
+        # B. Fallback to local file flow
+        else:
+            if not os.path.exists('credentials.json') and not os.path.exists('token.json'):
+                raise FileNotFoundError("未找到 credentials.json 且 secrets 中也无 google_credentials！")
+
+            if os.path.exists('token.json'):
                 try:
-                    creds.refresh(Request())
-                except Exception:
-                    os.remove('token.json')
-                    flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-                    creds = flow.run_local_server(port=0)
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-                creds = flow.run_local_server(port=0)
+                    creds = Credentials.from_authorized_user_file('token.json', SCOPES)
+                except:
+                    creds = None
             
-            with open('token.json', 'w') as token:
-                token.write(creds.to_json())
+            if not creds or not creds.valid:
+                if creds and creds.expired and creds.refresh_token:
+                    try:
+                        creds.refresh(Request())
+                    except Exception:
+                        os.remove('token.json')
+                        flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+                        creds = flow.run_local_server(port=0)
+                else:
+                    if os.path.exists('credentials.json'):
+                         flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
+                         creds = flow.run_local_server(port=0)
+                
+                # Save token locally if possible
+                try:
+                    with open('token.json', 'w') as token:
+                        token.write(creds.to_json())
+                except:
+                    pass
 
         self.drive = build('drive', 'v3', credentials=creds)
         self.sheets = build('sheets', 'v4', credentials=creds)
