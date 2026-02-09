@@ -6,6 +6,7 @@ import plotly.express as px
 from supabase import create_client, Client
 import tempfile
 import os
+import json
 
 # Optional imports
 try:
@@ -24,16 +25,55 @@ if "supabase_client" not in st.session_state:
 supabase = st.session_state["supabase_client"]
 
 # ====== AUTHENTICATION ======
+SESSION_FILE = ".session_cache"
+
+def save_session_to_file(session):
+    try:
+        with open(SESSION_FILE, "w") as f:
+            json.dump({
+                "access_token": session.access_token,
+                "refresh_token": session.refresh_token
+            }, f)
+    except Exception as e:
+        st.error(f"Failed to save session: {e}")
+
+def load_session_from_file():
+    if os.path.exists(SESSION_FILE):
+        try:
+            with open(SESSION_FILE, "r") as f:
+                data = json.load(f)
+                return data
+        except:
+            return None
+    return None
+
+def delete_session_file():
+    if os.path.exists(SESSION_FILE):
+        os.remove(SESSION_FILE)
+
 if "session" not in st.session_state:
     st.session_state["session"] = None
 
-# Restore session if exists
+# 1. Try to load from file if not in state
+if not st.session_state["session"]:
+    saved_session = load_session_from_file()
+    if saved_session:
+        try:
+            res = supabase.auth.set_session(
+                saved_session["access_token"], 
+                saved_session["refresh_token"]
+            )
+            st.session_state["session"] = res.session
+            st.session_state["user"] = res.user
+        except Exception as e:
+            delete_session_file() # Invalid token, clear it
+
+# 2. If valid session exists, refresh it (supabase client handles auto-refresh usually, but good to be explicit if token is old)
 if st.session_state["session"]:
     try:
-        supabase.auth.set_session(
-            st.session_state["session"].access_token, 
-            st.session_state["session"].refresh_token
-        )
+        # If we just loaded from file, session is set. If from state, ensure client has it.
+        # But set_session above already does it.
+        pass 
     except Exception as e:
         st.session_state["session"] = None
         st.rerun()
@@ -44,21 +84,33 @@ def login_form():
     tab_login, tab_signup = st.tabs(["登录 (Login)", "注册 (Sign Up)"])
     
     with tab_login:
-        email = st.text_input("邮箱 (Email)", key="login_email")
-        password = st.text_input("密码 (Password)", type="password", key="login_password")
-        if st.button("登录", type="primary", use_container_width=True):
+        with st.form("login_form"):
+            email = st.text_input("邮箱 (Email)", key="login_email")
+            password = st.text_input("密码 (Password)", type="password", key="login_password")
+            remember = st.checkbox("保持登录 (Remember Me)", value=True)
+            
+            submitted = st.form_submit_button("登录", type="primary", use_container_width=True)
+        
+        if submitted:
             try:
                 res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 st.session_state["session"] = res.session
                 st.session_state["user"] = res.user
+                
+                if remember:
+                    save_session_to_file(res.session)
+                
                 st.rerun()
             except Exception as e:
                 st.error(f"登录失败: {e}")
                 
     with tab_signup:
-        s_email = st.text_input("邮箱 (Email)", key="signup_email")
-        s_password = st.text_input("密码 (Password)", type="password", key="signup_password")
-        if st.button("注册账号", use_container_width=True):
+        with st.form("signup_form"):
+            s_email = st.text_input("邮箱 (Email)", key="signup_email")
+            s_password = st.text_input("密码 (Password)", type="password", key="signup_password")
+            submitted_s = st.form_submit_button("注册账号", use_container_width=True)
+            
+        if submitted_s:
             try:
                 res = supabase.auth.sign_up({"email": s_email, "password": s_password})
                 st.success("注册成功！请查收邮件确认，或直接登录（如果未开启邮箱验证）。")
@@ -75,6 +127,7 @@ with st.sidebar:
     st.write(f"当前用户: {user_email}")
     if st.button("登出 (Logout)"):
         supabase.auth.sign_out()
+        delete_session_file() # Clear local cache
         st.session_state["session"] = None
         st.session_state["user"] = None
         st.rerun()
@@ -84,7 +137,7 @@ with st.sidebar:
 def load_data() -> pd.DataFrame:
     try:
         # Supabase RLS automatically filters by user_id
-        response = supabase.table("expenses").select("*").order("date", desc=True).limit(500).execute()
+        response = supabase.table("expenses").select("*").order("date", desc=True).order("id", desc=True).limit(500).execute()
         rows = response.data
         
         if not rows:
@@ -222,10 +275,27 @@ st.markdown("""
         background-color: #2E86C1; box-shadow: 0 4px 10px rgba(46, 134, 193, 0.2); border-radius: 15px 15px 15px 0px; color: white; margin-left: 10px;
     }
     .stChatInputContainer { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; padding-bottom: 15px; background-color: #0E1117; }
+    
+    /* Typing Spinner Animation */
+    .typing-spinner {
+        display: inline-block;
+        width: 24px;
+        height: 24px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: #fff;
+        animation: spin 1s ease-in-out infinite;
+        margin-left: 10px;
+        vertical-align: middle;
+    }
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
 </style>
 """, unsafe_allow_html=True)
 
 tab_chat, tab_dash, tab_settings = st.tabs(["💬 智能输入", "📊 仪表盘", "⚙️ 设置"])
+
 
 # ==========================
 # TAB 0: SMART INPUT (CHAT)
@@ -299,68 +369,74 @@ with tab_chat:
         with chat_container:
             st.chat_message("user", avatar="https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123").write(prompt)
         
-        with st.spinner("思考中..."):
-            # Use Local Logic for Streamlit
-            result = expense_chat.process_user_message(prompt, df)
-            intent_type = result.get("type", "chat")
-            
-            reply = ""
-            if intent_type == "record":
-                # Handle single or multiple records
-                records_to_add = result.get("records", [])
-                if not records_to_add and "item" in result: 
-                    # Fallback for single item response
-                    records_to_add = [result]
+        with chat_container:
+            with st.chat_message("assistant", avatar="https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput"):
+                response_placeholder = st.empty()
+                response_placeholder.markdown("🤔 思考中... <span class='typing-spinner'></span>", unsafe_allow_html=True)
 
-                if records_to_add:
-                    payloads = []
-                    success_items = []
-                    
-                    for r in records_to_add:
-                        payloads.append({
-                            "date": r.get("date"),
-                            "item": r.get("item"),
-                            "amount": float(r.get("amount", 0)),
-                            "category": r.get("category", "其他"),
-                            "note": r.get("note", ""),
-                            "source": "chat_ui",
-                            "user_id": st.session_state["user"].id
-                        })
-                        success_items.append(f"{r.get('item')} ({r.get('amount')})")
+                # Use Local Logic for Streamlit
+                result = expense_chat.process_user_message(prompt, df)
+                intent_type = result.get("type", "chat")
+                
+                reply = ""
+                if intent_type == "record":
+                    # Handle single or multiple records
+                    records_to_add = result.get("records", [])
+                    if not records_to_add and "item" in result: 
+                        # Fallback for single item response
+                        records_to_add = [result]
 
+                    if records_to_add:
+                        payloads = []
+                        success_items = []
+                        
+                        for r in records_to_add:
+                            payloads.append({
+                                "date": r.get("date"),
+                                "item": r.get("item"),
+                                "amount": float(r.get("amount", 0)),
+                                "category": r.get("category", "其他"),
+                                "note": r.get("note", ""),
+                                "source": "chat_ui",
+                                "user_id": st.session_state["user"].id
+                            })
+                            success_items.append(f"{r.get('item')} ({r.get('amount')})")
+
+                        try:
+                            if payloads:
+                                supabase.table("expenses").insert(payloads).execute()
+                                reply = f"✅ 已为您记录 {len(payloads)} 笔: {', '.join(success_items)}"
+                                st.session_state["data_changed"] = True
+                            else:
+                                reply = "⚠️ 未识别到有效记录"
+                        except Exception as e:
+                            reply = f"❌ 记录失败: {e}"
+                    else:
+                        reply = "⚠️ 未识别到有效记录详情"
+
+                elif intent_type == "delete":
                     try:
-                        if payloads:
-                            supabase.table("expenses").insert(payloads).execute()
-                            reply = f"✅ 已为您记录 {len(payloads)} 笔: {', '.join(success_items)}"
-                            st.session_state["data_changed"] = True
-                        else:
-                            reply = "⚠️ 未识别到有效记录"
+                        supabase.table("expenses").delete().eq("id", result["id"]).execute()
+                        reply = "🗑️ 已删除指定记录。"
+                        st.session_state["data_changed"] = True
                     except Exception as e:
-                        reply = f"❌ 记录失败: {e}"
+                        reply = f"❌ 删除失败: {e}"
+
+                elif intent_type == "update":
+                    try:
+                        supabase.table("expenses").update(result["updates"]).eq("id", result["id"]).execute()
+                        reply = "✅ 已更新记录。"
+                        st.session_state["data_changed"] = True
+                    except Exception as e:
+                        reply = f"❌ 更新失败: {e}"
                 else:
-                    reply = "⚠️ 未识别到有效记录详情"
-
-            elif intent_type == "delete":
-                try:
-                    supabase.table("expenses").delete().eq("id", result["id"]).execute()
-                    reply = "🗑️ 已删除指定记录。"
-                    st.session_state["data_changed"] = True
-                except Exception as e:
-                    reply = f"❌ 删除失败: {e}"
-
-            elif intent_type == "update":
-                try:
-                    supabase.table("expenses").update(result["updates"]).eq("id", result["id"]).execute()
-                    reply = "✅ 已更新记录。"
-                    st.session_state["data_changed"] = True
-                except Exception as e:
-                    reply = f"❌ 更新失败: {e}"
-            else:
-                reply = result.get("reply", "抱歉，我没听懂。")
-            
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-            with chat_container:
-                 st.chat_message("assistant", avatar="https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput").write(reply)
+                    reply = result.get("reply", "抱歉，我没听懂。")
+                
+                # Update placeholder with final reply
+                response_placeholder.markdown(reply)
+                
+        # Persist to history
+        st.session_state.messages.append({"role": "assistant", "content": reply})
 
     if st.session_state.get("data_changed"):
         st.cache_data.clear()
@@ -397,6 +473,14 @@ if sel_categories:
 # TAB 1: DASHBOARD
 # ==========================
 with tab_dash:
+    # Manual Refresh Button
+    c_ref_1, c_ref_2 = st.columns([0.85, 0.15])
+    with c_ref_1: st.empty() # Spacer
+    with c_ref_2:
+        if st.button("🔄 刷新数据", use_container_width=True, key="btn_refresh_dash"):
+            st.cache_data.clear()
+            st.rerun()
+
     # KPI
     this_month = pd.Timestamp.today().strftime("%Y-%m")
     month_total = df[df["月(yyyy-mm)"] == this_month]["有效金额"].sum() if "月(yyyy-mm)" in df.columns else 0
