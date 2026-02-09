@@ -45,12 +45,21 @@ serve(async (req) => {
         const url = new URL(req.url);
         const { pathname } = url;
 
-        // Create Supabase Client (Auth context is automatically handled if 'Authorization' header is present)
+        // Create Supabase Client (Service Role - Bypass RLS)
+        // Note: We do NOT pass the user's Authorization header here because GPT sends a non-Supabase token.
         const supabaseClient = createClient(
             Deno.env.get("SUPABASE_URL") ?? "",
-            Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-            { global: { headers: { Authorization: req.headers.get("Authorization")! } } }
+            Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
         );
+
+        // Helper to get the primary user ID (since we are in Service Role mode)
+        // We assume this is a single-user app for now. 
+        // In a multi-user SaaS, we'd need to map GPT ID to User ID, but for personal use, this works.
+        const { data: { users }, error: userError } = await supabaseClient.auth.admin.listUsers();
+        if (userError || !users || users.length === 0) {
+            return json({ error: "No users found in Supabase Auth. Please sign up at least one user." }, 500);
+        }
+        const ownerId = users[0].id; // Use the first user as the owner
 
         // --- 1. Root Check ---
         if (pathname === "/" || pathname === "/gpt-api") {
@@ -62,6 +71,7 @@ serve(async (req) => {
             const { data, error } = await supabaseClient
                 .from("expenses")
                 .select("*")
+                .eq("user_id", ownerId) // Explicitly filter by ownerId
                 .order("date", { ascending: false })
                 .limit(200);
 
@@ -92,6 +102,7 @@ serve(async (req) => {
                         type: "array",
                         items: {
                             type: "object",
+                            additionalProperties: false,
                             required: ["date", "item", "amount", "category", "note"],
                             properties: {
                                 date: { type: "string", description: "YYYY-MM-DD" },
@@ -130,17 +141,17 @@ serve(async (req) => {
             if (!outText) throw new Error("No text from OpenAI");
 
             const parsed = JSON.parse(outText);
-            const rows = parsed?.items || [];
+            const items = parsed?.items || [];
 
             // Insert DB
-            const inserts = rows.map((r: any) => ({
+            const inserts = items.map((r: any) => ({
                 date: r.date || today,
                 item: r.item,
                 amount: r.amount,
                 category: r.category || "其他",
                 note: r.note || null,
-                source: source
-                // user_id is automatically handled by RLS + Supabase Auth Header
+                source: source,
+                user_id: ownerId // Explicitly set user_id
             }));
 
             if (inserts.length > 0) {
