@@ -74,10 +74,12 @@ serve(async (req) => {
             const body = await req.json();
             const text = String(body.text || "").trim();
             const source = body.source || "gpt";
+            // Use user-provided date or fallback to server time (UTC)
+            const today = body.date ? String(body.date).slice(0, 10) : new Date().toISOString().slice(0, 10);
+
             if (!text) return json({ detail: "text is required" }, 422);
 
             // OpenAI Parsing Logic
-            const today = new Date().toISOString().slice(0, 10);
             const apiKey = Deno.env.get("OPENAI_API_KEY");
             if (!apiKey) return json({ error: "Missing OPENAI_API_KEY" }, 500);
 

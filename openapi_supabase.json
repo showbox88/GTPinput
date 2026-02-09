@@ -195,6 +195,11 @@
                         "type": "string",
                         "description": "Natural language text describing one or more expenses. Examples: 'Lunch 30', 'Taxi 50 and groceries 100'"
                     },
+                    "date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "The current date of the user (YYYY-MM-DD). Used as reference for 'today', 'yesterday'."
+                    },
                     "source": {
                         "type": "string",
                         "default": "gpt",
