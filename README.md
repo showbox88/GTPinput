@@ -101,12 +101,31 @@ graph TD
 
 ---
 
+## 📂 文件结构 (File Structure)
+
+```text
+.
+├── .streamlit/          # Streamlit 配置 (secrets.toml, config.toml)
+├── config/              # 配置文件 (rules.py, settings.json)
+├── docs/                # 项目文档 (tasks, plans)
+├── supabase/            # Supabase 相关 (Edge Functions)
+│   └── functions/
+│       └── gpt-api/     # 核心 API (Cloudflare Worker/Supabase Edge Function)
+├── app.py               # Streamlit 主程序 (Frontend)
+├── expense_chat.py      # 本地对话逻辑处理
+├── openapi_supabase.json # OpenAI Actions 定义
+├── requirements.txt     # Python 依赖
+└── supabase_setup.sql   # 数据库初始化脚本
+```
+
+---
+
 ## 🖥️ 部署指南
 
-### 1. Cloudflare Worker (后端)
+### 1. Supabase / Cloudflare Worker (后端)
 需要绑定 D1 数据库 (`expense_db`) 和设置 `APP_API_KEY` / `OPENAPI_API_KEY` 环境变量。
 
-**关键配置 (wrangler.toml)**:
+**关键配置 (wrangler.toml / supabase/config.toml)**:
 ```toml
 [[d1_databases]]
 binding = "expense_db"
@@ -127,14 +146,20 @@ streamlit run app.py
 
 配置文件 `.streamlit/secrets.toml`:
 ```toml
+[supabase]
+url = "YOUR_SUPABASE_URL"
+key = "YOUR_SUPABASE_ANON_KEY"
+
 [general]
-API_URL = "https://your-worker.workers.dev"
+API_URL = "https://your-worker.workers.dev" # (可选: 如果使用独立 Worker)
 API_KEY = "your-key"
 ```
 
 ---
 
 ## 📝 待办计划 (Roadmap)
+- [x] **V3.0**: 月度预算管理 (Monthly Budgets)
+- [x] **V3.0**: 自动周期扣款 (Recurring Expenses)
 - [ ] 多账户/多币种支持
-- [ ] 导出 Excel/CSV 报表
+- [ ] 导出 Excel/CSV 报表 (已支持 CSV 导出)
 - [ ] 年度消费深度分析报告

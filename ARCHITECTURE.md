@@ -41,13 +41,15 @@ This project is a daily expense tracking system designed for speed, decoupling, 
 - Database schema changes must be backward-compatible.
 
 ## Future Roadmap (Planned)
-1. **Budgeting System**:
-   - Set monthly limits per category.
-   - Visual progress bars showing usage vs. limit.
-2. **Fixed Recurring Expenses**:
-   - Automated logging for regular bills (insurance, phone, subscriptions).
-   - Likely requires Cloudflare Worker Triggers (Cron).
-3. **Savings Plans**:
+1. **Savings Plans**:
    - Goal-based savings (e.g., "Travel Fund").
    - Target amounts and periodic auto-allocation.
    - Progress visualization.
+2. **Multi-Currency Support**:
+   - Auto-conversion rates.
+3. **Advanced Analytics**:
+   - Year-over-year comparison.
+
+## Completed Features (V3.0)
+- **Budgeting System**: Monthly limits, visual progress bars.
+- **Fixed Recurring Expenses**: Automated logging for regular bills.

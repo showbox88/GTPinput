@@ -1,0 +1,471 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "GTPinput Supabase API",
+        "description": "API for Expense Tracking powered by Supabase Edge Functions.",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "https://kwzomynltscbwuetnbka.supabase.co/functions/v1/gpt-api",
+            "description": "Supabase Edge Function"
+        }
+    ],
+    "paths": {
+        "/add": {
+            "post": {
+                "operationId": "addExpense",
+                "summary": "Record expenses from natural language text",
+                "description": "Parses natural language text (e.g., 'Lunch 30, Taxi 50') into structured expense records. Supports multiple items in one request.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AddExpenseRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Success",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AddExpenseResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/list": {
+            "get": {
+                "operationId": "listExpenses",
+                "summary": "Get recent expenses",
+                "description": "Retrieves the most recent expense records, sorted by date descending.",
+                "responses": {
+                    "200": {
+                        "description": "List of records",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListExpensesResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/delete": {
+            "post": {
+                "operationId": "deleteExpense",
+                "summary": "Delete an expense record",
+                "description": "Deletes a specific expense record by its ID.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeleteExpenseRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Deleted successfully"
+                    }
+                }
+            }
+        },
+        "/update": {
+            "post": {
+                "operationId": "updateExpense",
+                "summary": "Update an expense record",
+                "description": "Updates specific fields (amount, item, category, note) of an existing expense record.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/UpdateExpenseRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Updated successfully"
+                    }
+                }
+            }
+        },
+        "/budget/list": {
+            "get": {
+                "operationId": "listBudgets",
+                "summary": "Get all budgets",
+                "description": "Retrieves the user's defined budgets.",
+                "responses": {
+                    "200": {
+                        "description": "List of budgets",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListBudgetsResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/budget/add": {
+            "post": {
+                "operationId": "addBudget",
+                "summary": "Add a new budget",
+                "description": "Creates a new budget category with a limit amount.",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AddBudgetRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Budget created"
+                    }
+                }
+            }
+        },
+        "/budget/delete": {
+            "post": {
+                "operationId": "deleteBudget",
+                "summary": "Delete a budget",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeleteBudgetRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Budget deleted"
+                    }
+                }
+            }
+        },
+        "/recurring/list": {
+            "get": {
+                "operationId": "listRecurring",
+                "summary": "Get recurring expenses",
+                "description": "Retrieves active recurring expense rules (subscriptions, fixed costs).",
+                "responses": {
+                    "200": {
+                        "description": "List of recurring rules",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListRecurringResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "AddExpenseRequest": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language text describing one or more expenses. Examples: 'Lunch 30', 'Taxi 50 and groceries 100'"
+                    },
+                    "source": {
+                        "type": "string",
+                        "default": "gpt",
+                        "description": "Source identifier, usually 'gpt'"
+                    }
+                },
+                "required": [
+                    "text"
+                ]
+            },
+            "AddExpenseResponse": {
+                "type": "object",
+                "properties": {
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "inserted": {
+                        "type": "integer",
+                        "description": "Number of records inserted"
+                    },
+                    "rows": {
+                        "type": "array",
+                        "description": "The structured records that were inserted",
+                        "items": {
+                            "$ref": "#/components/schemas/ExpenseItem"
+                        }
+                    }
+                }
+            },
+            "ListExpensesResponse": {
+                "type": "object",
+                "properties": {
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ExpenseItem"
+                        }
+                    }
+                }
+            },
+            "ExpenseItem": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "Unique ID of the expense record"
+                    },
+                    "date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "ISO date string (YYYY-MM-DD)"
+                    },
+                    "item": {
+                        "type": "string",
+                        "description": "Name or description of the expense item"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "description": "Numerical amount of the expense"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Category of the expense",
+                        "enum": [
+                            "餐饮",
+                            "日用品",
+                            "交通",
+                            "服饰",
+                            "医疗",
+                            "娱乐",
+                            "居住",
+                            "其他"
+                        ]
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "Optional notes or details"
+                    }
+                }
+            },
+            "DeleteExpenseRequest": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "ID of the expense to delete"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "UpdateExpenseRequest": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "ID of the expense to update"
+                    },
+                    "amount": {
+                        "type": "number"
+                    },
+                    "item": {
+                        "type": "string"
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "餐饮",
+                            "日用品",
+                            "交通",
+                            "服饰",
+                            "医疗",
+                            "娱乐",
+                            "居住",
+                            "其他"
+                        ]
+                    },
+                    "note": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "ListBudgetsResponse": {
+                "type": "object",
+                "properties": {
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/BudgetItem"
+                        }
+                    }
+                }
+            },
+            "BudgetItem": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "餐饮",
+                            "日用品",
+                            "交通",
+                            "服饰",
+                            "医疗",
+                            "娱乐",
+                            "居住",
+                            "其他"
+                        ],
+                        "description": "Must match one of the standard categories to be effective"
+                    },
+                    "amount": {
+                        "type": "number",
+                        "description": "Budget limit amount"
+                    }
+                }
+            },
+            "AddBudgetRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "category": {
+                        "type": "string",
+                        "enum": [
+                            "餐饮",
+                            "日用品",
+                            "交通",
+                            "服饰",
+                            "医疗",
+                            "娱乐",
+                            "居住",
+                            "其他"
+                        ]
+                    },
+                    "amount": {
+                        "type": "number"
+                    },
+                    "color": {
+                        "type": "string",
+                        "default": "#FF4B4B"
+                    },
+                    "icon": {
+                        "type": "string",
+                        "default": "💰"
+                    }
+                },
+                "required": [
+                    "name",
+                    "category",
+                    "amount"
+                ]
+            },
+            "DeleteBudgetRequest": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
+            },
+            "ListRecurringResponse": {
+                "type": "object",
+                "properties": {
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "integer"
+                                },
+                                "name": {
+                                    "type": "string"
+                                },
+                                "amount": {
+                                    "type": "number"
+                                },
+                                "category": {
+                                    "type": "string"
+                                },
+                                "frequency": {
+                                    "type": "string",
+                                    "enum": [
+                                        "Monthly",
+                                        "Yearly"
+                                    ]
+                                },
+                                "day": {
+                                    "type": "integer",
+                                    "description": "Day of month to remind/charge"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "JWT"
+            }
+        }
+    },
+    "security": [
+        {
+            "bearerAuth": []
+        }
+    ]
+}

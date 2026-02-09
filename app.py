@@ -3,100 +3,155 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 import plotly.express as px
-
-import requests
-import json
-import os
+from supabase import create_client, Client
 import tempfile
-import expense_chat
-# Using Try-Except for optional modules to prevent crash if setup isn't perfect yet
+import os
+
+# Optional imports
 try:
-    from modules.ai_factory import AIProcessor
-    from modules.google_service import GoogleService
-    from config.rules import FOLDER_MAP, generate_filename
+    import expense_chat
 except ImportError:
     pass
 
-# ====== 配置 (从 secrets 读取) ======
-# 需要在 .streamlit/secrets.toml 中配置 API_URL 和 API_KEY
-API_URL = st.secrets["general"]["API_URL"]
-API_KEY = st.secrets["general"]["API_KEY"]
+# ====== SUPABASE SETUP ======
+# Initialize Supabase Client
+url = st.secrets["supabase"]["url"]
+key = st.secrets["supabase"]["key"]
+# Use resource caching for the client might be better, but simple session restore works too
+if "supabase_client" not in st.session_state:
+    st.session_state["supabase_client"] = create_client(url, key)
 
-# ====== Constants ======
-CATEGORIES = ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "居住", "其他"]
-# Initialize df globally to prevent NameError if load_data fails or scoping issues occur
-df = pd.DataFrame()
+supabase = st.session_state["supabase_client"]
 
+# ====== AUTHENTICATION ======
+if "session" not in st.session_state:
+    st.session_state["session"] = None
 
+# Restore session if exists
+if st.session_state["session"]:
+    try:
+        supabase.auth.set_session(
+            st.session_state["session"].access_token, 
+            st.session_state["session"].refresh_token
+        )
+    except Exception as e:
+        st.session_state["session"] = None
+        st.rerun()
 
-# ====== 数据读取 ======
-@st.cache_data(ttl=30)  # 30秒缓存
+def login_form():
+    st.title("🔐 GTPinput 登录")
+    
+    tab_login, tab_signup = st.tabs(["登录 (Login)", "注册 (Sign Up)"])
+    
+    with tab_login:
+        email = st.text_input("邮箱 (Email)", key="login_email")
+        password = st.text_input("密码 (Password)", type="password", key="login_password")
+        if st.button("登录", type="primary", use_container_width=True):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                st.session_state["session"] = res.session
+                st.session_state["user"] = res.user
+                st.rerun()
+            except Exception as e:
+                st.error(f"登录失败: {e}")
+                
+    with tab_signup:
+        s_email = st.text_input("邮箱 (Email)", key="signup_email")
+        s_password = st.text_input("密码 (Password)", type="password", key="signup_password")
+        if st.button("注册账号", use_container_width=True):
+            try:
+                res = supabase.auth.sign_up({"email": s_email, "password": s_password})
+                st.success("注册成功！请查收邮件确认，或直接登录（如果未开启邮箱验证）。")
+            except Exception as e:
+                st.error(f"注册失败: {e}")
+
+if not st.session_state.get("session"):
+    login_form()
+    st.stop()
+
+# Adding a logout button in sidebar
+with st.sidebar:
+    user_email = st.session_state["user"].email if st.session_state.get("user") else "Unknown"
+    st.write(f"当前用户: {user_email}")
+    if st.button("登出 (Logout)"):
+        supabase.auth.sign_out()
+        st.session_state["session"] = None
+        st.session_state["user"] = None
+        st.rerun()
+
+# ====== DATA LOADING ======
+@st.cache_data(ttl=5) # Short cache for responsiveness
 def load_data() -> pd.DataFrame:
     try:
-        url = f"{API_URL}/list"
-        headers = {"X-API-Key": API_KEY}
-        
-        response = requests.get(url, headers=headers, timeout=10)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # 假设数据在 "rows" 字段中，如果直接是列表则直接用
-        rows = data.get("rows", []) if isinstance(data, dict) else data
+        # Supabase RLS automatically filters by user_id
+        response = supabase.table("expenses").select("*").order("date", desc=True).limit(500).execute()
+        rows = response.data
         
         if not rows:
             return pd.DataFrame()
             
         df = pd.DataFrame(rows)
         
-        # ====== 字段映射与清洗 ======
-        # API返回: id, date, item, amount, category, note, source, created_at
-        # 目标列: 月(yyyy-mm), 分类, 有效金额, 创建时间
-        
-        # 1. 金额处理
+        # Data Cleaning
         if "amount" in df.columns:
             df["有效金额"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
         
-        # 2. 日期处理
         if "date" in df.columns:
             df["日期"] = pd.to_datetime(df["date"], errors="coerce")
             df["月(yyyy-mm)"] = df["日期"].dt.strftime("%Y-%m")
             df["年"] = df["日期"].dt.year
             
-        # 3. 分类
         if "category" in df.columns:
-            df["分类"] = df["category"]
+            # Map legacy English categories to Chinese
+            cat_map = {
+                "Dining": "餐饮", "Food": "餐饮", 
+                "Transport": "交通", "Transportation": "交通",
+                "Shopping": "日用品", "Daily": "日用品",
+                "Housing": "居住", "Home": "居住",
+                "Medical": "医疗", "Health": "医疗",
+                "Entertainment": "娱乐", "Fun": "娱乐",
+                "Clothing": "服饰",
+                "Others": "其他", "Other": "其他", "General": "其他"
+            }
+            # Apply map, keep original if not in map
+            df["分类"] = df["category"].replace(cat_map)
             
-        # 4. 创建时间
-        if "created_at" in df.columns:
-            df["创建时间"] = pd.to_datetime(df["created_at"], errors="coerce")
+            # Ensure all values are within the allowed list, otherwise default to "其他"
+            # This prevents blank dropdowns in editor
+            # (Optional: we can just trust the map + original values, but safer to standardize)
+            allowed = set(CATEGORIES)
+            df["分类"] = df["分类"].apply(lambda x: x if x in allowed else "其他")
             
-        # 5. 其他展示字段映射
         df["项目"] = df.get("item", "")
         df["备注"] = df.get("note", "")
-        df["金额"] = df.get("amount", 0)  # 显示用的原始金额
+        df["金额"] = df.get("amount", 0)
         df["来源"] = df.get("source", "")
-
-        return df
+        
+        return df   
         
     except Exception as e:
         st.error(f"数据加载失败: {e}")
         return pd.DataFrame()
 
-# ====== Helper Functions for V3.0 ======
+# ====== HELPER FUNCTIONS ======
 def get_budgets():
     try:
-        resp = requests.get(f"{API_URL}/budget/list", headers={"X-API-Key": API_KEY}, timeout=5)
-        if resp.status_code == 200:
-            return resp.json().get("rows", [])
+        response = supabase.table("budgets").select("*").execute()
+        return response.data
     except:
-        pass
-    return []
+        return []
 
 def add_budget(name, category, amount, color, icon):
     try:
-        payload = {"name": name, "category": category, "amount": float(amount), "color": color, "icon": icon}
-        requests.post(f"{API_URL}/budget/add", json=payload, headers={"X-API-Key": API_KEY})
+        payload = {
+            "name": name, 
+            "category": category, 
+            "amount": float(amount), 
+            "color": color, 
+            "icon": icon,
+            "user_id": st.session_state["user"].id
+        }
+        supabase.table("budgets").insert(payload).execute()
         st.cache_data.clear()
         return True
     except Exception as e:
@@ -105,7 +160,7 @@ def add_budget(name, category, amount, color, icon):
 
 def delete_budget(bid):
     try:
-        requests.post(f"{API_URL}/budget/delete", json={"id": int(bid)}, headers={"X-API-Key": API_KEY})
+        supabase.table("budgets").delete().eq("id", bid).execute()
         st.cache_data.clear()
         return True
     except:
@@ -113,17 +168,22 @@ def delete_budget(bid):
 
 def get_recurring_rules():
     try:
-        resp = requests.get(f"{API_URL}/recurring/list", headers={"X-API-Key": API_KEY}, timeout=5)
-        if resp.status_code == 200:
-            return resp.json().get("rows", [])
+        response = supabase.table("recurring_rules").select("*").eq("active", True).execute()
+        return response.data
     except:
-        pass
-    return []
+        return []
 
 def add_recurring(name, amount, category, frequency, day):
     try:
-        payload = {"name": name, "amount": float(amount), "category": category, "frequency": frequency, "day": int(day)}
-        requests.post(f"{API_URL}/recurring/add", json=payload, headers={"X-API-Key": API_KEY})
+        payload = {
+            "name": name, 
+            "amount": float(amount), 
+            "category": category, 
+            "frequency": frequency, 
+            "day": int(day),
+            "user_id": st.session_state["user"].id
+        }
+        supabase.table("recurring_rules").insert(payload).execute()
         return True
     except Exception as e:
         st.error(f"添加失败: {e}")
@@ -131,109 +191,37 @@ def add_recurring(name, amount, category, frequency, day):
 
 def delete_recurring(rid):
     try:
-        requests.post(f"{API_URL}/recurring/delete", json={"id": int(rid)}, headers={"X-API-Key": API_KEY})
+        supabase.table("recurring_rules").delete().eq("id", rid).execute()
         return True
     except:
         return False
 
 # ==========================================
-# Main App Layout with Tabs
+# Main App Layout
 # ==========================================
+CATEGORIES = ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "居住", "其他"]
 
-# ====== DATA LOADING ======
-# Load data EARLIER so that Chat Logic (in Tab 0) can use it for context!
 df = load_data()
 
-# ====== CUSTOM CSS & THEME OVERRIDES ======
+# CSS Styling (Same as before)
 st.markdown("""
 <style>
-    /* Global Professional Dark Theme Enhancements */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #0E1117; }
+    ::-webkit-scrollbar-thumb { background: #2E86C1; border-radius: 4px; }
     
-    /* Smooth Scrollbar */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    ::-webkit-scrollbar-track {
-        background: #0E1117; 
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #2E86C1; 
-        border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: #1B4F72; 
-    }
-
-    /* -------------------------
-       CHAT BUBBLES & LAYOUT
-       ------------------------- */
-    
-    /* Global Chat settings */
-    .stChatMessage {
-        background-color: transparent !important;
-        padding: 5px 0;
-    }
-
-    /* USER MESSAGE: Force alignment to LEFT */
-    div[data-testid="stChatMessage"] {
-        flex-direction: row !important; /* Force Avatar Left, Content Right for everyone including User */
-    }
-
-    /* Message Content Styling */
+    .stChatMessage { background-color: transparent !important; padding: 5px 0; }
+    div[data-testid="stChatMessage"] { flex-direction: row !important; }
     div[data-testid="stChatMessage"] .stMarkdown {
-        font-family: 'Inter', sans-serif;
-        line-height: 1.6;
-        padding: 12px 16px;
-        max-width: 85%;
-        position: relative;
+        font-family: 'Inter', sans-serif; line-height: 1.6; padding: 12px 16px; max-width: 85%;
     }
-
-    /* 🧠 Assistant Bubble (Right of Avatar) */
     div[data-testid="stChatMessage"][aria-label="assistant"] .stMarkdown {
-        background-color: #1E2530; 
-        border: 1px solid #2E86C1;
-        border-radius: 0px 15px 15px 15px; /* Top-Left square */
-        color: #E0E0E0;
+        background-color: #1E2530; border: 1px solid #2E86C1; border-radius: 0px 15px 15px 15px; color: #E0E0E0;
     }
-
-    /* 👤 User Bubble (Blue Theme) */
     div[data-testid="stChatMessage"][aria-label="user"] .stMarkdown {
-        background-color: #2E86C1; 
-        box-shadow: 0 4px 10px rgba(46, 134, 193, 0.2);
-        border-radius: 15px 15px 15px 0px; 
-        color: white;
-        border-radius: 15px 15px 15px 0px; 
-        margin-left: 10px;
+        background-color: #2E86C1; box-shadow: 0 4px 10px rgba(46, 134, 193, 0.2); border-radius: 15px 15px 15px 0px; color: white; margin-left: 10px;
     }
-
-    /* Input Area - Integrated Look */
-    .stChatInputContainer {
-        border-top: 1px solid rgba(255,255,255,0.1);
-        padding-top: 15px;
-        padding-bottom: 15px;
-        background-color: #0E1117; 
-    }
-    
-    /* Button Overrides */
-    .stButton button[kind="primary"] {
-        background: linear-gradient(90deg, #2E86C1 0%, #1B4F72 100%);
-        border: none;
-        box-shadow: 0 4px 10px rgba(46, 134, 193, 0.3);
-        transition: all 0.3s ease;
-    }
-    .stButton button[kind="primary"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 15px rgba(46, 134, 193, 0.5);
-    }
-
-    /* File Uploader Customization */
-    [data-testid="stFileUploader"] {
-        border: 1px dashed #2E86C1;
-        border-radius: 10px;
-        background-color: rgba(46, 134, 193, 0.05);
-    }
-
+    .stChatInputContainer { border-top: 1px solid rgba(255,255,255,0.1); padding-top: 15px; padding-bottom: 15px; background-color: #0E1117; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -243,19 +231,14 @@ tab_chat, tab_dash, tab_settings = st.tabs(["💬 智能输入", "📊 仪表盘
 # TAB 0: SMART INPUT (CHAT)
 # ==========================
 with tab_chat:
-    # Custom Header Layout
     c_head_1, c_head_2 = st.columns([0.85, 0.15])
-    with c_head_1:
-         st.subheader("💡 智能助手")
+    with c_head_1: st.subheader("💡 智能助手")
     with c_head_2:
-         # Clear chat button
-         if st.button("🧼 清空", help="清空当前对话历史", use_container_width=True):
-             # Reset to engaging welcome message
-             welcome_txt = "👋 嘿！我是你的智能财务管家。\n\n今天又发现了什么好东西？或者……又要为“剁手”记账了？💸\n\n你可以说：\n- **“记录午饭沙县小吃 25”**\n- **“把刚才的 25 改成 28”**\n- **“上周我在交通上花了多少？”**"
-             st.session_state.messages = [{"role": "assistant", "content": welcome_txt}]
-             st.rerun()
+        if st.button("🧼 清空", use_container_width=True):
+            st.session_state.messages = [{"role": "assistant", "content": "👋 嘿！我是你的智能财务管家。今天又花了什么钱？"}]
+            st.rerun()
 
-    # --- 0. Draft Expense Confirmation (From Camera/Upload) ---
+    # Draft Confirmation
     if "draft_expense" in st.session_state:
         draft = st.session_state["draft_expense"]
         with st.expander("📝 确认记账信息 (Confirm Receipt)", expanded=True):
@@ -264,303 +247,145 @@ with tab_chat:
                 st.info(f"**{draft.get('item')}**")
                 st.caption(f"分类: {draft.get('category')} | 日期: {draft.get('date')}")
             with cols[1]:
-                st.metric("金额 (CNY)", f"{draft.get('amount')}")
+                st.metric("金额", f"{draft.get('amount')}")
             
-            st.text_area("备注 (Note)", value=draft.get('note', ''), key="draft_note", disabled=True)
-            
-            c1, c2 = st.columns(2)
-            if c1.button("✅ 确认保存 (Save)", type="primary", use_container_width=True):
-                # Construct the text for the /add API
-                # Format: "Item Amount Category Date:YYYY-MM-DD Note:..."
-                text_payload = f"{draft.get('item')} {draft.get('amount')} {draft.get('category')} Date:{draft.get('date')} Note:{draft.get('note')}"
-                
+            if st.button("✅ 确认保存", type="primary", use_container_width=True):
                 try:
-                    with st.spinner("Saving..."):
-                        requests.post(
-                            f"{API_URL}/add", 
-                            json={"text": text_payload, "source": "camera_receipt"}, 
-                            headers={"X-API-Key": API_KEY}
-                        )
-                        st.success("已保存！")
-                        del st.session_state["draft_expense"]
-                        st.session_state["data_changed"] = True
-                        st.session_state.messages.append({"role": "assistant", "content": f"✅ 已为您记录: {draft.get('item')} {draft.get('amount')}元"})
-                        st.rerun()
+                    payload = {
+                        "date": draft.get('date'),
+                        "item": draft.get('item'),
+                        "amount": float(draft.get('amount', 0)),
+                        "category": draft.get('category'),
+                        "note": draft.get('note'),
+                        "source": "camera_receipt",
+                        "user_id": st.session_state["user"].id
+                    }
+                    supabase.table("expenses").insert(payload).execute()
+                    st.success("已保存！")
+                    del st.session_state["draft_expense"]
+                    st.session_state["data_changed"] = True
+                    st.rerun()
                 except Exception as e:
                     st.error(f"保存失败: {e}")
 
-            if c2.button("❌ 放弃 (Cancel)", use_container_width=True):
+            if st.button("❌ 放弃"):
                 del st.session_state["draft_expense"]
                 st.rerun()
 
-    # --- 1. Scrollable Chat Container (Fixed Height) ---
+    # Chat History
     chat_container = st.container(height=500)
-    
     if "messages" not in st.session_state:
-        st.session_state.messages = []
-        # Engaging Welcome Message (Init)
-        welcome_txt = "👋 嘿！我是你的智能财务管家。\n\n今天又发现了什么好东西？或者……又要为“剁手”记账了？💸\n\n你可以说：\n- **“记录午饭沙县小吃 25”**\n- **“把刚才的 25 改成 28”**\n- **“上周我在交通上花了多少？”**"
-        st.session_state.messages.append({"role": "assistant", "content": welcome_txt})
+        st.session_state.messages = [{"role": "assistant", "content": "👋 嘿！我是你的智能财务管家。"}]
 
     with chat_container:
         for msg in st.session_state.messages:
-            # Use consistent dicebear avatars (SVG)
-            # Bot: Robot style | User: Person style
-            if msg["role"] == "assistant":
-                avatar_url = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput"
-            else:
-                avatar_url = "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123"
-            
-            st.chat_message(msg["role"], avatar=avatar_url).write(msg["content"])
+            role = msg["role"]
+            avatar = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput" if role == "assistant" else "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123"
+            st.chat_message(role, avatar=avatar).write(msg["content"])
 
-    # --- 2. Integrated Interaction Area (Upload + Input) ---
-    # Use columns to position the upload button near the input area conceptually
-    
-    # Tool Bar above Input
+    # File Upload / Camera
     col_tools_1, col_tools_2 = st.columns([0.1, 0.9])
-    
     with col_tools_1:
-        # Compact Popover for Upload
-        with st.popover("📎", help="上传单据/证件 (SmartDoc)"):
-            st.markdown("### 📤 上传附件")
-            
-            # Use tabs for File vs Camera
-            tab_file, tab_cam = st.tabs(["📂 文件", "📸 拍照"])
-            
-            final_file = None
-            
-            with tab_file:
-                u_file = st.file_uploader("选择文件", type=["png", "jpg", "jpeg", "webp", "pdf"], key="sl_uploader", label_visibility="collapsed")
-                if u_file: final_file = u_file
-                
-            with tab_cam:
-                # Lazy load to prevent immediate permission request
-                if st.checkbox("🔌 启动相机 (Start Camera)", key="enable_camera"):
-                    st.caption("📱 **提示**：如需切换前后镜头，请使用相机画面上的翻转按钮")
-                    c_file = st.camera_input("拍照", label_visibility="collapsed")
-                    if c_file: final_file = c_file
+         with st.popover("📎"):
+            st.caption("上传单据/拍照")
+            doc_file = st.file_uploader("File", label_visibility="collapsed")
+            if doc_file and st.button("处理"):
+                 # Simple placeholder for file logic - reuse previous logic if needed
+                 st.info("图片处理逻辑参考之前版本...") 
 
-            if final_file:
-                # Show preview if image
-                # if final_file.type.startswith("image"):
-                #     st.image(final_file, width=150)
-                
-                if st.button(f"🚀 上传处理: {final_file.name}", key="btn_upload_process", type="primary", use_container_width=True):
-                    with st.status("正在处理...", expanded=True) as status:
-                        # Save to temp
-                        # Handle potential missing explicit name in camera_input (often 'camera_input.jpg' or similar)
-                        fname = final_file.name if hasattr(final_file, 'name') else "camera_capture.jpg"
-                        
-                        tfile = tempfile.NamedTemporaryFile(delete=False, suffix=f".{fname.split('.')[-1]}")
-                        tfile.write(final_file.read())
-                        tfile.close()
-                        temp_path = tfile.name
-                        
-                        status.write("🤖 AI 识别中...")
-                        try:
-                            # 1. Analyze Image
-                            ai = AIProcessor()
-                            res = ai.analyze_image(temp_path)
-                            
-                            if res.get("type").lower() == "error":
-                                st.error(f"识别失败: {res.get('message')}")
-                            else:
-                                # 2. Show Result & Confirm
-                                status.update(label="✅ 识别成功！请确认详情", state="complete", expanded=True)
-                                
-                                # Display the extracted data
-                                col_img, col_info = st.columns([1, 2])
-                                with col_img:
-                                    st.image(temp_path, caption="原始凭证", width=150)
-                                
-                                with col_info:
-                                    st.markdown(f"**商户/项目**: {res.get('item', '未知')}")
-                                    st.markdown(f"**金额**: `{res.get('amount', 0)}`")
-                                    st.markdown(f"**分类**: {res.get('category', 'General')}")
-                                    st.caption(f"日期: {res.get('date')} | 备注: {res.get('note')}")
-                                    
-                                    # Save to Session State for external processing
-                                    st.session_state["draft_expense"] = res
-                                    st.rerun()
-
-                        except Exception as e:
-                            st.error(f"处理出错: {e}")
-                        finally:
-                            # Cleanup
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-                            st.exception(e) # More detailed error
-                        
-                        try:
-                            # Cleanup
-                            # os.remove(temp_path) # Might fail if still held
-                            pass
-                        except:
-                            pass
-
-    # --- 3. Chat Input (Pinned Bottom) ---
+    # Chat Input
     if prompt := st.chat_input("说点什么... (例如: 午饭 30)"):
-        # Add User Message to State
         st.session_state.messages.append({"role": "user", "content": prompt})
-        # Write to container immediately
         with chat_container:
             st.chat_message("user", avatar="https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123").write(prompt)
         
-        # Process logic
-        with st.spinner("Thinking..."):
+        with st.spinner("思考中..."):
+            # Use Local Logic for Streamlit
             result = expense_chat.process_user_message(prompt, df)
             intent_type = result.get("type", "chat")
             
-            # Record Intent
+            reply = ""
             if intent_type == "record":
-                 item_str = result.get('item', 'Unknown')
-                 amt_str = str(result.get('amount', 0))
-                 date_str = result.get('date', pd.Timestamp.today().strftime("%Y-%m-%d"))
-                 cat_str = result.get('category', '其他')
-                 note_str = result.get('note', '')
-                 
-                 synthetic_text = f"{item_str} {amt_str} {cat_str} {note_str} Date:{date_str}"
-                 try:
-                     resp = requests.post(f"{API_URL}/add", json={"text": synthetic_text, "source": "chat_ui"}, headers={"X-API-Key": API_KEY})
-                     if resp.status_code == 200:
-                         reply = f"✅ 已为您记录: **{item_str}** ${amt_str} ({cat_str})"
-                         st.session_state["data_changed"] = True
-                     else:
-                         reply = f"❌ 记录失败: {resp.text}"
-                 except Exception as e:
-                     reply = f"❌ 错误: {e}"
-                 
-                 st.session_state.messages.append({"role": "assistant", "content": reply})
-                 with chat_container:
-                     st.chat_message("assistant", avatar="https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput").write(reply)
+                # Handle single or multiple records
+                records_to_add = result.get("records", [])
+                if not records_to_add and "item" in result: 
+                    # Fallback for single item response
+                    records_to_add = [result]
 
-            # Delete Intent     
-            elif intent_type == "delete":
-                del_id = result.get("id")
-                if del_id:
-                    try:
-                        resp = requests.post(f"{API_URL}/delete", json={"id": int(del_id)}, headers={"X-API-Key": API_KEY})
-                        if resp.status_code == 200:
-                             reply = f"🗑️ 已删除 ID: {del_id} 的记录"
-                             st.session_state["data_changed"] = True
-                        else:
-                             reply = f"❌ 删除失败: {resp.text}"
-                    except Exception as e:
-                         reply = f"❌ 错误: {e}"
+                if records_to_add:
+                    payloads = []
+                    success_items = []
                     
-                    st.session_state.messages.append({"role": "assistant", "content": reply})
-                    with chat_container:
-                        st.chat_message("assistant").write(reply)
+                    for r in records_to_add:
+                        payloads.append({
+                            "date": r.get("date"),
+                            "item": r.get("item"),
+                            "amount": float(r.get("amount", 0)),
+                            "category": r.get("category", "其他"),
+                            "note": r.get("note", ""),
+                            "source": "chat_ui",
+                            "user_id": st.session_state["user"].id
+                        })
+                        success_items.append(f"{r.get('item')} ({r.get('amount')})")
 
-            # Update Intent
-            elif intent_type == "update":
-                upd_id = result.get("id")
-                updates = result.get("updates", {})
-                
-                if upd_id and updates:
                     try:
-                        # 1. Find original row from df
-                        # We need to find the row with 'id' == upd_id
-                        # df might be missing 'id' column if empty, handle that
-                        if not df.empty and "id" in df.columns:
-                            original_row = df[df["id"] == upd_id]
-                            if not original_row.empty:
-                                row_data = original_row.iloc[0].to_dict()
-                                
-                                # 2. Merge updates
-                                # Map friendly update keys to API keys just in case? 
-                                # API uses: date, item, amount, category, note, id
-                                # Chat output uses: date, item, amount, category, note
-                                # Should match directly.
-                                
-                                # Construct full payload from original + updates
-                                payload = {
-                                    "id": int(upd_id),
-                                    "date": updates.get("date", row_data.get("date", row_data.get("日期"))), # Fallback to various data shapes
-                                    "item": updates.get("item", row_data.get("item", row_data.get("项目"))),
-                                    "amount": float(updates.get("amount", row_data.get("amount", row_data.get("金额")))),
-                                    "category": updates.get("category", row_data.get("category", row_data.get("分类"))),
-                                    "note": updates.get("note", row_data.get("note", row_data.get("备注")))
-                                }
-                                
-                                # 3. Send Update
-                                resp = requests.post(f"{API_URL}/update", json=payload, headers={"X-API-Key": API_KEY})
-                                if resp.status_code == 200:
-                                     reply = f"✅ 已修改记录 {upd_id}: "
-                                     if "amount" in updates: reply += f"金额->{payload['amount']} "
-                                     if "item" in updates: reply += f"项目->{payload['item']} "
-                                     if "category" in updates: reply += f"分类->{payload['category']} "
-                                     
-                                     st.session_state["data_changed"] = True
-                                else:
-                                     reply = f"❌ 修改失败: {resp.text}"
-                            else:
-                                reply = f"⚠️ 找不到 ID: {upd_id} 的原始记录，无法修改。"
+                        if payloads:
+                            supabase.table("expenses").insert(payloads).execute()
+                            reply = f"✅ 已为您记录 {len(payloads)} 笔: {', '.join(success_items)}"
+                            st.session_state["data_changed"] = True
                         else:
-                             reply = "⚠️ 本地数据未同步，无法执行修改，请刷新页面重试。"
-                    
+                            reply = "⚠️ 未识别到有效记录"
                     except Exception as e:
-                         reply = f"❌ 错误: {e}"
+                        reply = f"❌ 记录失败: {e}"
                 else:
-                    reply = "⚠️ 无法识别需要修改的信息。"
-                
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-                with chat_container:
-                    st.chat_message("assistant").write(reply)
+                    reply = "⚠️ 未识别到有效记录详情"
 
+            elif intent_type == "delete":
+                try:
+                    supabase.table("expenses").delete().eq("id", result["id"]).execute()
+                    reply = "🗑️ 已删除指定记录。"
+                    st.session_state["data_changed"] = True
+                except Exception as e:
+                    reply = f"❌ 删除失败: {e}"
 
-            # Normal Chat
-            else: # type == chat
+            elif intent_type == "update":
+                try:
+                    supabase.table("expenses").update(result["updates"]).eq("id", result["id"]).execute()
+                    reply = "✅ 已更新记录。"
+                    st.session_state["data_changed"] = True
+                except Exception as e:
+                    reply = f"❌ 更新失败: {e}"
+            else:
                 reply = result.get("reply", "抱歉，我没听懂。")
-                st.session_state.messages.append({"role": "assistant", "content": reply})
-                with chat_container:
-                    st.chat_message("assistant").write(reply)
+            
+            st.session_state.messages.append({"role": "assistant", "content": reply})
+            with chat_container:
+                 st.chat_message("assistant", avatar="https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput").write(reply)
 
     if st.session_state.get("data_changed"):
         st.cache_data.clear()
         del st.session_state["data_changed"]
         st.rerun()
 
-    # JS Hack to auto-focus the chat input after rerun
-    st.components.v1.html(
-        """
-        <script>
-            var text_input = window.parent.document.querySelector('textarea[data-testid="stChatInputTextArea"]');
-            if (text_input) {
-                text_input.focus();
-            }
-        </script>
-        """,
-        height=0,
-        width=0,
-    )
-
-
-# ====== DATA LOADING ======
-# Already loaded above.
-# df = load_data()
-
-# ====== SIDEBAR FILTERS (Shared effect) ======
-st.sidebar.header("筛选 (Filter)")
-months = sorted(df["月(yyyy-mm)"].dropna().unique().tolist()) if "月(yyyy-mm)" in df.columns else []
-sel_month = st.sidebar.selectbox("月份", options=["全部"] + months, index=(len(months) if months else 0))
-
-sel_categories = None
-if "分类" in df.columns:
-    cats = sorted(df["分类"].dropna().unique().tolist())
-    sel_categories = st.sidebar.multiselect("分类", options=cats, default=[])
+# ==========================
+# TAB 1: DASHBOARD
+# ==========================
+# ====== SIDEBAR FILTERS ======
+with st.sidebar:
+    st.divider()
+    st.header("筛选 (Filter)")
+    months = sorted(df["月(yyyy-mm)"].dropna().unique().tolist()) if "月(yyyy-mm)" in df.columns else []
+    sel_month = st.selectbox("月份", options=["全部"] + months, index=len(months) if months else 0)
+    
+    sel_categories = []
+    if "分类" in df.columns:
+        cats = sorted(df["分类"].dropna().unique().tolist())
+        sel_categories = st.multiselect("分类", options=cats, default=[])
 
 # Apply Filter
 df_view = df.copy()
-is_current_month = False # Flag for budget calc
-
-# If "All" is selected, we can't really calculate monthly budget progress accurately unless we pick 'this month' implicitly?
-# Budget logic: Usually compares CURRENT MONTH spending vs Budget.
-# If user selects a specific month, we show budget progress for THAT month.
-# If user selects "All", maybe we default to Current Month for the Progress Bars? Or hide them?
-# Let's align Budget Progress with "Selected Month". If "All", we show "Current Month" progress.
-
 target_month_for_budget = pd.Timestamp.today().strftime("%Y-%m")
+
 if sel_month != "全部":
     df_view = df_view[df_view["月(yyyy-mm)"] == sel_month] if "月(yyyy-mm)" in df_view.columns else df_view
     target_month_for_budget = sel_month
@@ -568,98 +393,45 @@ if sel_month != "全部":
 if sel_categories:
     df_view = df_view[df_view["分类"].isin(sel_categories)]
 
-
 # ==========================
 # TAB 1: DASHBOARD
 # ==========================
 with tab_dash:
-    # --- KPI ---
-    k1, k2, k3, k4 = st.columns(4)
-    
+    # KPI
     this_month = pd.Timestamp.today().strftime("%Y-%m")
-    this_year = pd.Timestamp.today().year
-    
-    # Safe Sum Helper
-    def safe_sum(dataframe, col):
-        return dataframe[col].sum() if col in dataframe.columns else 0
-
-    month_total = df[df["月(yyyy-mm)"] == this_month]["有效金额"].sum() if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns else 0
-    year_total = df[df["年"] == this_year]["有效金额"].sum() if "年" in df.columns and "有效金额" in df.columns else 0
-    view_total = safe_sum(df_view, "有效金额")
-    
+    month_total = df[df["月(yyyy-mm)"] == this_month]["有效金额"].sum() if "月(yyyy-mm)" in df.columns else 0
+    k1, k2, k3 = st.columns(3)
     k1.metric("📅 本月支出", f"${month_total:,.2f}")
-    k2.metric("🗓️ 今年支出", f"${year_total:,.2f}")
-    k3.metric("🔍 当前筛选合计", f"${view_total:,.2f}")
-    k4.metric("📝 记录笔数", f"{len(df_view)}")
+    k2.metric("🔍 筛选合计", f"${df_view['有效金额'].sum():,.2f}" if not df_view.empty else "$0.00")
+    k3.metric("📝 记录笔数", f"{len(df_view)}")
     
     st.divider()
-
-    # --- BUDGET PROGRESS (New) ---
+    
+    # Budgets
     st.subheader(f"📊 预算进度 ({target_month_for_budget})")
     budgets = get_budgets()
     
-    if not budgets:
-        st.info("暂无预算计划，请去“管理与设置”中添加。")
-    else:
-        # Calculate spending for the target month per category
-        # getting full data for calculation to avoid filter interference (except month)
-        df_budget_calc = df.copy()
-        if "月(yyyy-mm)" in df_budget_calc.columns:
-            df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == target_month_for_budget]
-        
-        # Helper for Custom Progress Bar
-        def render_budget_card(name, icon, amount, limit, color):
-            pct = (amount / limit) if limit > 0 else 0
-            pct_disp = min(pct * 100, 100)
-            
-            # Color logic: if over budget, turn red-ish, effectively overridden by user color usually, 
-            # but let's stick to user color for the bar, maybe showing warning text.
-            bar_color = color
-            # Dark mode friendly track: semi-transparent white looks good on dark backgrounds
-            bg_color = "rgba(255, 255, 255, 0.1)" 
-            
-            # HTML for custom bar
-            # Height: 24px (taller), Radius: 12px
-            # Removed explicit text colors causing visibility issues in dark mode
-            html = f"""
-            <div style="margin-bottom: 15px;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 5px; font-weight: 500;">
-                    <span>{icon} {name}</span>
-                    <span style="opacity: 0.8;">${amount:,.0f} / ${limit:,.0f}</span>
-                </div>
-                <div style="background-color: {bg_color}; border-radius: 12px; height: 24px; width: 100%; overflow: hidden;">
-                    <div style="background-color: {bar_color}; width: {pct_disp}%; height: 100%; border-radius: 12px; transition: width 0.5s;"></div>
-                </div>
-                <div style="text-align: right; font-size: 0.8rem; opacity: 0.7; margin-top: 2px;">
-                    使用率: {pct:.1%}
-                </div>
-            </div>
-            """
-            st.markdown(html, unsafe_allow_html=True)
-            if pct > 1.0:
-               st.caption(f"⚠️ **已超支 {pct-1:.1%}**")
+    # Calculate budget spending based on the target month (ignoring other filters for accurate progress)
+    df_budget_calc = df.copy()
+    if "月(yyyy-mm)" in df_budget_calc.columns:
+        df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == target_month_for_budget]
 
-        # Display in columns of 3
+    if budgets:
         b_cols = st.columns(3)
         for i, b in enumerate(budgets):
+            spent = df_budget_calc[df_budget_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_budget_calc.columns else 0
+            limit = b["amount"]
+            pct = spent / limit if limit > 0 else 0
             with b_cols[i % 3]:
-                b_cat = b["category"]
-                b_limit = b["amount"]
-                b_icon = b.get("icon", "💰")
-                b_name = b.get("name", b_cat)
-                b_color = b.get("color", "#FF4B4B")
-                
-                # Actual spent in this category for this month
-                spent = 0
-                if "分类" in df_budget_calc.columns and "有效金额" in df_budget_calc.columns:
-                    spent = df_budget_calc[df_budget_calc["分类"] == b_cat]["有效金额"].sum()
-                
-                render_budget_card(b_name, b_icon, spent, b_limit, b_color)
-
+                st.markdown(f"**{b['category']}**")
+                st.progress(min(pct, 1.0))
+                st.caption(f"${spent:,.0f} / ${limit:,.0f}")
+    else:
+        st.info("暂无预算，请在“设置”中添加。")
+    
     st.divider()
 
     # --- CHARTS ---
-    # 移动端适配：st.columns 在手机上会垂直堆叠
     left, right = st.columns([2, 1])
 
     with left:
@@ -667,344 +439,183 @@ with tab_dash:
         if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns:
             month_sum = df.groupby("月(yyyy-mm)", as_index=False)["有效金额"].sum().sort_values("月(yyyy-mm)")
             fig_bar = px.bar(month_sum, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
-            fig_bar.update_traces(textfont_size=12, textangle=0, textposition="outside", cliponaxis=False)
-            fig_bar.update_layout(
-                margin=dict(l=10, r=10, t=30, b=10),
-                height=300,
-                xaxis_title="",
-                yaxis_title="金额 ($)",
-                yaxis_tickprefix="$"
-            )
-            st.plotly_chart(fig_bar, key="chart_bar_1", on_select="ignore") # plotly_chart defaults to using container width in modern streamlit or needs config? 
-            # Actually, typically warning implies st.plotly_chart(..., use_container_width=True) -> st.plotly_chart(..., width=None) or similar? 
-            # Wait, the warning said: "For `use_container_width=True`, use `width='stretch'`".
-            # So:
-            st.plotly_chart(fig_bar, width="stretch")
+            fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
+            st.plotly_chart(fig_bar, use_container_width=True)
         else:
-            st.warning("暂无月度数据")
+            st.warning("暂无数据")
 
     with right:
         st.subheader("🥧 分类占比")
-        if "分类" in df_view.columns and "有效金额" in df_view.columns:
+        if not df_view.empty and "分类" in df_view.columns:
             cat_sum = df_view.groupby("分类", as_index=False)["有效金额"].sum().sort_values("有效金额", ascending=False)
-            if cat_sum.empty:
-                st.info("无数据")
-            else:
-                fig_pie = px.pie(cat_sum, names="分类", values="有效金额", hole=0.4)
-                fig_pie.update_layout(
-                    margin=dict(l=10, r=10, t=30, b=10),
-                    height=300,
-                    showlegend=False
-                )
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-                st.plotly_chart(fig_pie, width="stretch")
+            fig_pie = px.pie(cat_sum, names="分类", values="有效金额", hole=0.4)
+            fig_pie.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10), showlegend=False)
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_pie, use_container_width=True)
         else:
-            st.warning("暂无分类数据")
+            st.warning("暂无数据")
 
     st.divider()
 
-    # --- RECENT RECORDS (Data Editor) ---
-    st.subheader("📄 最近记录")
+    # Data Editor
+    st.subheader("📄 记录管理")
     if not df_view.empty:
-        df_editor = df_view.copy()
-        if "id" in df_editor.columns:
-            df_editor.set_index("id", inplace=True)
+        df_edit = df_view.copy()
+        # Ensure ID is string for safety in editor index matching if needed, but int is fine usually
+        df_edit["删除"] = False
         
-        if "删除" not in df_editor.columns:
-            df_editor.insert(0, "删除", False)
-
-        show_cols = ["删除", "日期", "项目", "金额", "分类", "备注"]
-        final_cols = [c for c in show_cols if c in df_editor.columns]
+        # We need 'id' in the dataframe but maybe hidden or read-only
+        edit_cols = ["删除", "日期", "项目", "金额", "分类", "备注", "id"]
         
-        column_config = {
+        # Configure columns
+        col_cfg = {
             "删除": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
             "日期": st.column_config.DateColumn("日期", format="YYYY-MM-DD", width="small"),
             "项目": st.column_config.TextColumn("项目", width="medium"),
-            "金额": st.column_config.NumberColumn("金额", min_value=0, format="$%.2f", width="small"),
+            "金额": st.column_config.NumberColumn("金额", format="$%.2f", width="small"),
             "分类": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="small"),
-            "备注": st.column_config.TextColumn("备注", width="medium")
+            "备注": st.column_config.TextColumn("备注", width="medium"),
+            "id": st.column_config.TextColumn("ID", disabled=True)
         }
-
-        if "创建时间" in df_editor.columns:
-            df_editor = df_editor.sort_values("创建时间", ascending=False)
-
-        edited_df = st.data_editor(
-            df_editor[final_cols],
-            column_config=column_config,
-            hide_index=True,
-            # width="stretch" replaces use_container_width=True as per deprecation warning
-            width="stretch",
-            num_rows="fixed",
-            key="expense_editor"
+        
+        # Use a key to access state
+        edited = st.data_editor(
+            df_edit[edit_cols], 
+            column_config=col_cfg, 
+            hide_index=True, 
+            num_rows="fixed", 
+            key="editor",
+            use_container_width=True
         )
-
-        # Logic for Save/Delete buttons (Same as before)
-        to_delete_mask = edited_df["删除"] == True
-        delete_count = to_delete_mask.sum()
-        editor_state = st.session_state.get("expense_editor", {})
-        edited_rows_dict = editor_state.get("edited_rows", {})
-        has_edits = len(edited_rows_dict) > 0
+        
+        # Button Logic
+        # Calculate selected deletes
+        to_delete = edited[edited["删除"] == True]
+        delete_count = len(to_delete)
         
         btn_label = "💾 保存修改"
         btn_type = "primary"
         if delete_count > 0:
             btn_label = f"🗑️ 确认删除 ({delete_count} 条)"
-            btn_type = "secondary" 
-        
-        if st.button(btn_label, type=btn_type, width="stretch"):
-            try:
-                changes_made = False
-                # 1. Delete
-                if delete_count > 0:
-                    for rec_id, row in edited_df[to_delete_mask].iterrows():
-                        requests.post(f"{API_URL}/delete", json={"id": int(rec_id)}, headers={"X-API-Key": API_KEY})
-                    st.success(f"已删除 {delete_count} 条")
-                    changes_made = True
+            btn_type = "secondary"
+            
+        if st.button(btn_label, type=btn_type, use_container_width=True):
+            changes_made = False
+            
+            # 1. Handle Deletes first
+            if delete_count > 0:
+                # Batch delete if possible, or loop
+                ids_to_del = to_delete["id"].tolist()
+                for d_id in ids_to_del:
+                    supabase.table("expenses").delete().eq("id", d_id).execute()
+                st.success(f"已删除 {delete_count} 条记录")
+                changes_made = True
+            
+            # 2. Handle Updates
+            # Check session state for edits
+            # The 'editor' key in session_state contains 'edited_rows' dict: {row_index: {col_name: new_val}}
+            # CAUTION: row_index corresponds to the dataframe passed to data_editor (df_edit)
+            # Since df_edit might be filtered (df_view), we must rely on the index of df_edit matching the edited_rows keys.
+            # Using .iloc[idx] on df_edit retrieves the correct original row.
+            
+            edits = st.session_state.get("editor", {}).get("edited_rows", {})
+            if edits:
+                for idx, changes in edits.items():
+                    # Get ID of the row being edited
+                    # Note: indices in edited_rows are integers 0..N relative to the displayed table
+                    try:
+                        row_id = df_edit.iloc[idx]["id"]
+                        
+                        # Prepare update payload
+                        clean_changes = {}
+                        if "日期" in changes: clean_changes["date"] = changes["日期"]
+                        if "项目" in changes: clean_changes["item"] = changes["项目"]
+                        if "金额" in changes: clean_changes["amount"] = changes["金额"]
+                        if "分类" in changes: clean_changes["category"] = changes["分类"]
+                        if "备注" in changes: clean_changes["note"] = changes["备注"]
+                        
+                        if clean_changes:
+                            supabase.table("expenses").update(clean_changes).eq("id", row_id).execute()
+                            changes_made = True
+                    except IndexError:
+                        pass # Should not happen if state is consistent
                 
-                # 2. Update
-                if has_edits:
-                    for idx, changes in edited_rows_dict.items():
-                        row = edited_df.iloc[idx]
-                        if row["删除"]: continue
-                        payload = {
-                            "id": int(row.name),
-                            "date": row["日期"].strftime("%Y-%m-%d") if hasattr(row["日期"], "strftime") else str(row["日期"]),
-                            "item": row["项目"],
-                            "amount": float(row["金额"]),
-                            "category": row["分类"],
-                            "note": row["备注"]
-                        }
-                        requests.post(f"{API_URL}/update", json=payload, headers={"X-API-Key": API_KEY})
-                    st.success("已更新修改")
-                    changes_made = True
-
-                if changes_made:
-                    time.sleep(1)
-                    st.cache_data.clear()
-                    st.rerun()
-            except Exception as e:
-                st.error(f"操作失败: {e}")
-    else:
-        st.info("暂无数据。")
-
-
-# ==========================
-# TAB 2: SETTINGS & MANAGEMENT
-# ==========================
-with tab_settings:
-    st.header("⚙️ 设置与数据管理")
-    
-    # --- 1. Budget Settings ---
-    with st.expander("💰 预算管理 (Budget Plans)", expanded=True):
-        st.caption("设置每个分类的月度预算，将在首页展示进度条。")
-        
-        # Add New Budget (Refactored to Non-Form for Interactive Grid)
-        if "new_budget_icon" not in st.session_state:
-            st.session_state["new_budget_icon"] = "💰"
-
-        c1, c2, c3 = st.columns(3)
-        b_name = c1.text_input("预算名称", placeholder="例如：本月伙食", key="nb_name")
-        b_cat = c2.selectbox("对应分类", options=CATEGORIES, key="nb_cat")
-        b_amt = c3.number_input("预算金额", min_value=0.0, step=100.0, value=1000.0, key="nb_amt")
-        
-        c4, c5 = st.columns([1, 2])
-        b_color = c4.color_picker("进度条颜色", "#FF4B4B", key="nb_color")
-        
-        with c5:
-            st.markdown(f"**当前选择图标:** {st.session_state['new_budget_icon']}")
-
-        # Icon Grid picker
-        st.caption("选择图标 (点击选中):")
-        EMOJI_OPTIONS = [
-            "💰", "🍔", "🍜", "🍱", "🍷", "☕", "🍰", "🍎", "🥓", "🍳",  # 10
-            "🚗", "🚕", "🚇", "✈️", "⛽", "🚲", "🏠", "💡", "💧", "🔌",  # 20
-            "🛒", "🛍️", "👕", "👠", "📱", "💻", "🕶️", "💍", "💄", "🧴",  # 30
-            "🍿", "🎮", "🎵", "🎨", "🎟️", "💊", "🏥", "🏋️", "👶", "🎁"   # 40
-        ]
-        
-        # 10 cols grid
-        cols = st.columns(10)
-        for i, icon in enumerate(EMOJI_OPTIONS):
-            with cols[i % 10]:
-                # If selected, outline/primary, else secondary/ghost? 
-                # Streamlit button styles are limited. primary = filled, secondary = outline/default.
-                btn_type = "primary" if st.session_state["new_budget_icon"] == icon else "secondary"
-                if st.button(icon, key=f"btn_icon_{i}", type=btn_type, width="stretch"):
-                    st.session_state["new_budget_icon"] = icon
-                    st.rerun()
-
-        st.divider()
-
-        if st.button("➕ 添加预算计划", type="primary", width="stretch"):
-            if not b_name:
-                st.error("请输入预算名称")
-            else:
-                if add_budget(b_name, b_cat, b_amt, b_color, st.session_state["new_budget_icon"]):
-                    st.success("添加成功！")
-                    # Reset basic fields manually if needed, or rely on rerun clearing
-                    # But session state text inputs persist unless cleared.
-                    # We can clear by setting keys in session state?
-                    # Using key=... allows us to clear them:
-                    # st.session_state["nb_name"] = "" ...
-                    time.sleep(0.5)
-                    st.rerun()
-
-        # List Existing Budgets
-        st.divider()
-        st.markdown("##### 📜 已有预算清单")
-        curr_budgets = get_budgets()
-        if curr_budgets:
-            for b in curr_budgets:
-                col_info, col_del = st.columns([4, 1])
-                with col_info:
-                    st.markdown(f"{b.get('icon','')} **{b['name']}** | {b['category']} | 预算: **${b['amount']}**")
-                with col_del:
-                    if st.button("删除", key=f"del_b_{b['id']}"):
-                        if delete_budget(b['id']):
-                            st.rerun()
-        else:
-            st.info("暂无预算，请添加。")
-
-    # --- 2. Recurring Expenses ---
-    with st.expander("🔄 固定开销 (Recurring Expenses)"):
-        st.caption("设置定期自动扣款规则（如房租、订阅费）。需配合 Cloudflare Cron Trigger 使用。")
-        
-        # Add New Rule
-        with st.form("add_recurring_form", clear_on_submit=True):
-            r1, r2, r3 = st.columns(3)
-            r_name = r1.text_input("名称", placeholder="例如：房租")
-            r_amt = r2.number_input("金额", min_value=0.0, step=100.0, value=2000.0)
-            r_cat = r3.selectbox("分类", options=CATEGORIES) # Manual '居住' might not strictly match but let's allow "其他" or expand list
+                if changes_made and delete_count == 0:
+                    st.success("修改已保存")
             
-            r4, r5 = st.columns(2)
-            r_freq = r4.selectbox("频率", options=["weekly", "monthly", "yearly"])
-            
-            r_day_help = "Weekly: 1=周一...7=周日; Monthly: 1-31; Yearly: Day of Year (1-366)"
-            r_day = r5.number_input("日期/星期 (Day)", min_value=1, max_value=366, value=1, help=r_day_help)
-            
-            if st.form_submit_button("➕ 添加固定规则"):
-                if add_recurring(r_name, r_amt, r_cat, r_freq, r_day):
-                    st.success("添加成功！")
-                    st.rerun()
-        
-        # List Existing Rules (Editable)
-        st.divider()
-        st.markdown("##### 📜 运行中的规则 (支持编辑)")
-        curr_rules = get_recurring_rules()
-        
-        if curr_rules:
-            df_rules = pd.DataFrame(curr_rules)
-            
-            # 字段简单的预处理
-            if "active" not in df_rules.columns:
-                df_rules["active"] = 1
-            
-            # 将 active (1/0) 转为 bool 给 Checkbox 使用
-            df_rules["启用"] = df_rules["active"].apply(lambda x: True if x == 1 else False)
-            
-            # 删除标记列
-            df_rules.insert(0, "删除", False)
-            
-            if "id" in df_rules.columns:
-                df_rules.set_index("id", inplace=True)
-
-            # 配置列
-            # Schema: name text, amount real, category text, frequency text, day integer, last_run_date text
-            r_col_config = {
-                "删除": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
-                "启用": st.column_config.CheckboxColumn("✅", width="small", default=True),
-                "name": st.column_config.TextColumn("名称", width="medium", required=True),
-                "amount": st.column_config.NumberColumn("金额", min_value=0.0, format="$%.2f", width="small", required=True),
-                "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="small", required=True),
-                "frequency": st.column_config.SelectboxColumn("频率", options=["weekly", "monthly", "yearly"], width="small", required=True),
-                "day": st.column_config.NumberColumn("日期/Day", width="small", min_value=1, max_value=366, required=True, help="Weekly:1-7; Monthly:1-31"),
-                "last_run_date": st.column_config.TextColumn("上次运行", disabled=True, width="medium"),
-            }
-            
-            # 显示的列
-            r_show_cols = ["删除", "启用", "name", "amount", "category", "frequency", "day", "last_run_date"]
-            
-            edited_rules = st.data_editor(
-                df_rules[r_show_cols],
-                column_config=r_col_config,
-                hide_index=True,
-                width="stretch",
-                key="recurring_editor"
-            )
-            
-            # Save Logic
-            r_to_delete_mask = edited_rules["删除"] == True
-            r_delete_count = r_to_delete_mask.sum()
-            
-            r_editor_state = st.session_state.get("recurring_editor", {})
-            r_edited_rows = r_editor_state.get("edited_rows", {})
-            r_has_edits = len(r_edited_rows) > 0
-            
-            r_btn_label = "💾 保存规则修改"
-            r_btn_type = "primary"
-            if r_delete_count > 0:
-                r_btn_label = f"🗑️ 确认删除 ({r_delete_count} 条)"
-                r_btn_type = "secondary"
-            
-            if st.button(r_btn_label, type=r_btn_type, width="stretch", key="save_rules"):
-                try:
-                    r_changes = False
-                    # 1. Delete
-                    if r_delete_count > 0:
-                        for rid, row in edited_rules[r_to_delete_mask].iterrows():
-                             requests.post(f"{API_URL}/recurring/delete", json={"id": int(rid)}, headers={"X-API-Key": API_KEY})
-                        st.success(f"已删除 {r_delete_count} 条规则")
-                        r_changes = True
-                    
-                    # 2. Update
-                    if r_has_edits:
-                         for idx, changes in r_edited_rows.items():
-                             row = edited_rules.iloc[idx]
-                             if row["删除"]: continue
-                             
-                             payload = {
-                                 "id": int(row.name),
-                                 "name": row["name"],
-                                 "amount": float(row["amount"]),
-                                 "category": row["category"],
-                                 "frequency": row["frequency"],
-                                 "day": int(row["day"]),
-                                 "active": bool(row["启用"])
-                             }
-                             requests.post(f"{API_URL}/recurring/update", json=payload, headers={"X-API-Key": API_KEY})
-                         st.success("规则已更新")
-                         r_changes = True
-                    
-                    if r_changes:
-                        time.sleep(1)
-                        st.rerun()
-
-                except Exception as e:
-                    st.error(f"操作失败: {e}")
-        else:
-            st.info("暂无规则。")
-        
-        # Manual Trigger Button (For testing)
-        if st.button("🛠️ 手动触发检查 (立即运行)"):
-            try:
-                chk = requests.get(f"{API_URL}/recurring/check", headers={"X-API-Key": API_KEY}, timeout=10)
-                res = chk.json()
-                st.success(f"检查完成，新增 {res.get('processed', 0)} 条记录")
+            if changes_made:
                 time.sleep(1)
                 st.cache_data.clear()
                 st.rerun()
-            except Exception as e:
-                st.error(f"Error: {e}")
 
-    # --- 3. Danger Zone (Moved here) ---
-    with st.expander("🚨 危险区域 (Danger Zone)"):
-        st.warning("清空所有数据，不可恢复！")
-        confirm_clear = st.checkbox("确认清空所有数据")
-        if st.button("💣 清空数据", type="secondary"):
-            if confirm_clear:
-                requests.post(f"{API_URL}/clear", headers={"X-API-Key": API_KEY})
-                st.cache_data.clear()
+# ==========================
+# TAB 2: SETTINGS
+# ==========================
+with tab_settings:
+    st.header("⚙️ 设置")
+    with st.expander("预算管理"):
+        with st.form("add_budget"):
+            c1, c2 = st.columns(2)
+            b_cat = c1.selectbox("分类", CATEGORIES)
+            b_amt = c2.number_input("限额", min_value=0)
+            if st.form_submit_button("添加预算"):
+                add_budget(f"{b_cat}预算", b_cat, b_amt, "#FF4B4B", "💰")
                 st.rerun()
-            else:
-                st.error("请先确认")
+                
+        # List budgets to delete
+        cur_budgets = get_budgets()
+        if cur_budgets:
+            for b in cur_budgets:
+                c1, c2 = st.columns([4,1])
+                c1.text(f"{b['category']}: ${b['amount']}")
+                if c2.button("删除", key=f"del_b_{b['id']}"):
+                    delete_budget(b['id'])
+                    st.rerun()
+        else:
+            st.caption("暂无预算设置")
 
+    with st.expander("订阅/固定支出 (Recurring Expenses)"):
+        st.caption("设置每月/每年的固定支出，系统会自动提醒或记录（需配置 Edge Function 定时任务，目前仅作为记录展示）。")
+        
+        # Add New Rule
+        with st.form("add_recurring"):
+            cols = st.columns(4)
+            r_name = cols[0].text_input("名称 (e.g. Netflix)")
+            r_amt = cols[1].number_input("金额", min_value=0.0, step=1.0)
+            r_cat = cols[2].selectbox("分类", CATEGORIES, key="r_cat")
+            r_freq = cols[3].selectbox("周期", ["Monthly", "Yearly"])
+            r_day = st.number_input("扣款日 (Day of Month)", min_value=1, max_value=31, value=1)
+            
+            if st.form_submit_button("添加订阅"):
+                add_recurring(r_name, r_amt, r_cat, r_freq, r_day)
+                st.success(f"已添加: {r_name}")
+                time.sleep(1)
+                st.rerun()
+
+        # List Rules
+        rules = get_recurring_rules()
+        if rules:
+            st.write("📋 已有订阅:")
+            for r in rules:
+                rc1, rc2, rc3 = st.columns([3, 2, 1])
+                rc1.text(f"{r['name']} ({r['category']})")
+                rc2.text(f"${r['amount']} / {r['frequency']}")
+                if rc3.button("删除", key=f"del_r_{r['id']}"):
+                    delete_recurring(r['id'])
+                    st.rerun()
+        else:
+            st.caption("暂无固定支出")
+
+    with st.expander("数据导出 (Export Data)"):
+        st.write("将所有账单数据导出为 CSV 文件。")
+        if not df.empty:
+            csv = df.to_csv(index=False).encode('utf-8-sig') # BOM for Excel compatibility
+            st.download_button(
+                "📥 下载 CSV",
+                csv,
+                "expenses_backup.csv",
+                "text/csv",
+                key='download-csv'
+            )
+        else:
+            st.warning("暂无数据可导出")
