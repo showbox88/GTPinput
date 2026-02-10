@@ -954,19 +954,36 @@ if main_nav == "⚙️ 设置":
         else:
             st.caption("暂无预算设置")
 
-    with st.expander("订阅/固定支出 (Recurring Expenses)"):
-        st.write("设置每月/每年的固定支出。点击下方按钮可立即检查是否需要扣款。")
-        
-        c_check, c_dummy = st.columns([1, 2])
         if c_check.button("🔄 立即检查今日应扣费 (Check Now)"):
            with st.spinner("检查中..."):
                res_msg = check_and_process_recurring()
-               if "成功" in res_msg:
-                   st.success(res_msg)
-                   time.sleep(2)
-                   st.rerun()
-               else:
-                   st.info(res_msg)
+               # Store message in session state to survive rerun
+               st.session_state["recurring_msg"] = res_msg
+               st.session_state["recurring_expanded"] = True # Keep expanded
+               time.sleep(0.5)
+               st.rerun()
+
+    if "recurring_msg" in st.session_state:
+        msg = st.session_state["recurring_msg"]
+        if "成功" in msg or "添加成功" in msg:
+            st.success(msg)
+        else:
+            st.info(msg)
+        # Clear after showing
+        del st.session_state["recurring_msg"]
+
+    # Use state to control expander
+    expanded_state = st.session_state.get("recurring_expanded", False)
+    with st.expander("订阅/固定支出 (Recurring Expenses)", expanded=expanded_state):
+        # Reset expander state logic? No, let it stay open if user is working here.
+        # But if they click "Check Now", we want it open.
+        # If they normally open it, it's manual.
+        # st.expander doesn't support dynamic 'expanded' update easily without key hack or rerun.
+        # Let's just put the message *outside* or ensure it's seen.
+        # Actually, if I move the message *above* the expander (or inside if open), it works.
+        # The code above prints message *before* expander. That is good.
+        
+        st.write("设置每月/每年的固定支出。")
         
         # Add New Rule
         with st.form("add_recurring"):
