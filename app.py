@@ -249,12 +249,91 @@ def add_recurring(name, amount, category, frequency, day):
         st.error(f"添加失败: {e}")
         return False
 
-def delete_recurring(rid):
     try:
         supabase.table("recurring_rules").delete().eq("id", rid).execute()
         return True
     except:
         return False
+
+def check_and_process_recurring():
+    """
+    Manually check if any recurring rules match today's date and add them if not already added this month.
+    """
+    try:
+        rules = get_recurring_rules()
+        if not rules:
+            return "没有发现活跃的订阅规则。"
+        
+        today = pd.Timestamp.today()
+        current_day = today.day
+        current_month_str = today.strftime("%Y-%m")
+        count_added = 0
+        details = []
+
+        for rule in rules:
+            # 1. Check if today matches the rule's day (Simple Version: Only trigger on exact day or if force checked?)
+            # Let's be smart: If today >= rule_day and no record exists for this month, add it.
+            # This handles case where user forgets to check on the exact day.
+            
+            rule_day = rule.get("day", 1)
+            
+            # Simple Logic: If today is past or equal to the due day
+            if current_day >= rule_day:
+                # 2. Check if already added for this month
+                # unique identifier: rule_id + month
+                # We can query expenses with specific note format or just trust user?
+                # Best way: Check expenses table for item == rule_name and date startswith current_month
+                
+                # Construct a query to find existing record
+                # Note: This is an approximation. Ideally we have a linkage table. 
+                # But for personal app, matching Name + Category + Amount + Month is sufficient.
+                
+                start_date = f"{current_month_str}-01"
+                end_date = f"{current_month_str}-31" # Loose end date
+                
+                res = supabase.table("expenses") \
+                    .select("*") \
+                    .eq("item", rule["name"]) \
+                    .eq("category", rule["category"]) \
+                    .eq("amount", rule["amount"]) \
+                    .gte("date", start_date) \
+                    .lte("date", end_date) \
+                    .execute()
+                
+                if not res.data:
+                    # Not found -> Add it!
+                    # Construct date: use this month's specific day
+                    # Handle invalid days (e.g. Feb 30) -> limit to month end
+                    try:
+                        due_date = pd.Timestamp(year=today.year, month=today.month, day=rule_day)
+                    except ValueError:
+                         # Fallback to last day of month if day is invalid (e.g. 31st in Feb)
+                         due_date = pd.Timestamp(year=today.year, month=today.month, day=1) + pd.offsets.MonthEnd(0)
+
+                    payload = {
+                        "date": due_date.strftime("%Y-%m-%d"),
+                        "item": rule["name"],
+                        "amount": float(rule["amount"]),
+                        "category": rule["category"],
+                        "note": "自动通过订阅规则生成 (Auto-Recurring)",
+                        "source": "recurring_rule",
+                        "user_id": st.session_state["user"].id
+                    }
+                    supabase.table("expenses").insert(payload).execute()
+                    count_added += 1
+                    details.append(f"✅ {rule['name']} (${rule['amount']})")
+                else:
+                    # Already exists
+                    pass
+        
+        if count_added > 0:
+            st.cache_data.clear()
+            return f"成功添加 {count_added} 笔订阅支出:\n" + "\n".join(details)
+        else:
+            return "没有发现新的应扣费项目 (都已记录或未到期)。"
+
+    except Exception as e:
+        return f"检查失败: {e}"
 
 # ==========================================
 # CUSTOM WIDGETS
@@ -857,7 +936,18 @@ if main_nav == "⚙️ 设置":
             st.caption("暂无预算设置")
 
     with st.expander("订阅/固定支出 (Recurring Expenses)"):
-        st.caption("设置每月/每年的固定支出，系统会自动提醒或记录（需配置 Edge Function 定时任务，目前仅作为记录展示）。")
+        st.write("设置每月/每年的固定支出。点击下方按钮可立即检查是否需要扣款。")
+        
+        c_check, c_dummy = st.columns([1, 2])
+        if c_check.button("🔄 立即检查今日应扣费 (Check Now)"):
+           with st.spinner("检查中..."):
+               res_msg = check_and_process_recurring()
+               if "成功" in res_msg:
+                   st.success(res_msg)
+                   time.sleep(2)
+                   st.rerun()
+               else:
+                   st.info(res_msg)
         
         # Add New Rule
         with st.form("add_recurring"):
