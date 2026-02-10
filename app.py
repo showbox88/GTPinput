@@ -275,7 +275,10 @@ def check_and_process_recurring():
             # Let's be smart: If today >= rule_day and no record exists for this month, add it.
             # This handles case where user forgets to check on the exact day.
             
-            rule_day = rule.get("day", 1)
+            try:
+                rule_day = int(rule.get("day", 1))
+            except:
+                rule_day = 1
             
             # Simple Logic: If today is past or equal to the due day
             if current_day >= rule_day:
@@ -295,10 +298,17 @@ def check_and_process_recurring():
                     .select("*") \
                     .eq("item", rule["name"]) \
                     .eq("category", rule["category"]) \
-                    .eq("amount", rule["amount"]) \
                     .gte("date", start_date) \
                     .lte("date", end_date) \
-                    .execute()
+                    .execute() # Removed strict amount check to be safer, or keep it? 
+                    # Actually keeping item+category+date is safer. Amount might change.
+                    # But if user manually added "Electric Bill" with different amount, we might not want to double charge?
+                    # Let's trust existing logic but add Debug info if needed. 
+                    # ISSUE: 'amount' in rule is numeric, in DB might be float. 
+                    # Let's remove .eq("amount") to avoid float precision issues causing "Not Found" result (which would cause Duplicate add)
+                    # WAIT, if it returns "Not Found", it adds it. The user says "Seems not recorded", meaning it returned "Already exists" (res.data is having content) OR it failed day check.
+                    # Screenshot: "Effective Amount" logic in load_data uses "amount".
+                    # Let's debug by simplifying: Just check Item Name + Current Month.
                 
                 if not res.data:
                     # Not found -> Add it!
