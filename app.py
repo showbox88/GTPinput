@@ -269,6 +269,8 @@ def check_and_process_recurring():
         current_month_str = today.strftime("%Y-%m")
         count_added = 0
         details = []
+        
+        details.append(f"📅 Check Date: {today.strftime('%Y-%m-%d')}")
 
         for rule in rules:
             # 1. Check if today matches the rule's day (Simple Version: Only trigger on exact day or if force checked?)
@@ -330,17 +332,24 @@ def check_and_process_recurring():
                         "user_id": st.session_state["user"].id
                     }
                     supabase.table("expenses").insert(payload).execute()
+                    supabase.table("expenses").insert(payload).execute()
                     count_added += 1
-                    details.append(f"✅ {rule['name']} (${rule['amount']})")
+                    details.append(f"✅ 添加成功: {rule['name']}")
                 else:
                     # Already exists
-                    pass
+                    details.append(f"⏭️ 跳过 (已存在): {rule['name']} (Found {len(res.data)} records)")
+            else:
+                 details.append(f"⏳ 跳过 (未到期): {rule['name']} (Due: {rule_day}, Today: {current_day})")
         
         if count_added > 0:
             st.cache_data.clear()
             return f"成功添加 {count_added} 笔订阅支出:\n" + "\n".join(details)
         else:
-            return "没有发现新的应扣费项目 (都已记录或未到期)。"
+            # Show debug info if nothing added
+            debug_msg = "没有发现新的应扣费项目 (No new items added).\n"
+            if len(details) > 0: # If we have log details of skips
+                debug_msg += "\nDetails:\n" + "\n".join(details)
+            return debug_msg
 
     except Exception as e:
         return f"检查失败: {e}"
