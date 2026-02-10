@@ -14,6 +14,13 @@ try:
 except ImportError:
     pass
 
+st.set_page_config(
+    page_title="GTPinput",
+    page_icon="💰",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+
 # ====== SUPABASE SETUP ======
 # Initialize Supabase Client
 url = st.secrets["supabase"]["url"]
@@ -89,7 +96,7 @@ def login_form():
             password = st.text_input("密码 (Password)", type="password", key="login_password")
             remember = st.checkbox("保持登录 (Remember Me)", value=True)
             
-            submitted = st.form_submit_button("登录", type="primary", use_container_width=True)
+            submitted = st.form_submit_button("登录", type="primary", width="stretch")
         
         if submitted:
             try:
@@ -108,7 +115,7 @@ def login_form():
         with st.form("signup_form"):
             s_email = st.text_input("邮箱 (Email)", key="signup_email")
             s_password = st.text_input("密码 (Password)", type="password", key="signup_password")
-            submitted_s = st.form_submit_button("注册账号", use_container_width=True)
+            submitted_s = st.form_submit_button("注册账号", width="stretch")
             
         if submitted_s:
             try:
@@ -250,6 +257,41 @@ def delete_recurring(rid):
         return False
 
 # ==========================================
+# CUSTOM WIDGETS
+# ==========================================
+def render_budget_progress(spent, limit):
+    pct = spent / limit if limit > 0 else 0
+    pct_clamped = min(pct, 1.0) * 100
+    
+    # Color Logic
+    if pct > 1.0:
+        # Over Budget: Red/Orange Gradient
+        bar_color = "linear-gradient(90deg, #FF416C 0%, #FF4B2B 100%)"
+        text_color = "#FF4B2B"
+    elif pct > 0.8:
+        # Warning (80%+): Yellow/Orange
+        bar_color = "linear-gradient(90deg, #F2994A 0%, #F2C94C 100%)" 
+        text_color = "#F2994A"
+    else:
+        # Normal: Blue Gradient
+        bar_color = "linear-gradient(90deg, #56CCF2 0%, #2F80ED 100%)"
+        text_color = "#2F80ED"
+        
+    # HTML Component
+    html = f"""
+    <div style="margin-bottom: 2px;">
+        <span style="font-weight:600; font-size:14px; color:{text_color if pct > 1.0 else 'inherit'}">
+            ${spent:,.0f} / ${limit:,.0f}
+        </span>
+        <span style="float:right; font-size:12px; color:rgba(255,255,255,0.6)">{pct*100:.1f}%</span>
+    </div>
+    <div class="budget-bar-bg">
+        <div class="budget-bar-fill" style="width: {pct_clamped}%; background: {bar_color};"></div>
+    </div>
+    """
+    return html
+
+# ==========================================
 # Main App Layout
 # ==========================================
 CATEGORIES = ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "居住", "其他"]
@@ -291,20 +333,77 @@ st.markdown("""
     @keyframes spin {
         to { transform: rotate(360deg); }
     }
+    
+    /* Custom Budget Progress Bar */
+    .budget-bar-bg {
+        background-color: rgba(255, 255, 255, 0.1); 
+        border-radius: 12px;
+        width: 100%;
+        height: 24px;
+        margin: 5px 0;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    
+    .budget-bar-fill {
+        height: 100%;
+        border-radius: 12px;
+        transition: width 0.6s ease;
+        box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    
+    /* Carousel Animations - REMOVED */
 </style>
 """, unsafe_allow_html=True)
 
-tab_chat, tab_dash, tab_settings = st.tabs(["💬 智能输入", "📊 仪表盘", "⚙️ 设置"])
+# Custom Navigation (Replaces st.tabs for stability)
+st.markdown("""
+<style>
+    /* Radio Button Style to look like Tabs */
+    div[data-testid="stRadio"] > div {
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        width: 100%;
+    }
+    div[data-testid="stRadio"] label {
+        background-color: transparent;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background 0.3s;
+        border: 1px solid rgba(255,255,255,0.1);
+        margin: 0 5px;
+        text-align: center;
+        flex-grow: 1;
+    }
+    div[data-testid="stRadio"] label:hover {
+        background-color: rgba(255,255,255,0.05);
+    }
+    div[data-testid="stRadio"] label[data-checked="true"] {
+        background-color: #2E86C1 !important;
+        color: white !important;
+        border-color: #2E86C1 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
+main_nav = st.radio(
+    "Navigation", 
+    ["💬 智能输入", "📊 仪表盘", "⚙️ 设置"], 
+    label_visibility="collapsed",
+    horizontal=True,
+    key="main_nav_radio"
+)
 
 # ==========================
 # TAB 0: SMART INPUT (CHAT)
 # ==========================
-with tab_chat:
+if main_nav == "💬 智能输入":
     c_head_1, c_head_2 = st.columns([0.85, 0.15])
     with c_head_1: st.subheader("💡 智能助手")
     with c_head_2:
-        if st.button("🧼 清空", use_container_width=True):
+        if st.button("🧼 清空", width="stretch"):
             st.session_state.messages = [{"role": "assistant", "content": "👋 嘿！我是你的智能财务管家。今天又花了什么钱？"}]
             st.rerun()
 
@@ -319,7 +418,7 @@ with tab_chat:
             with cols[1]:
                 st.metric("金额", f"{draft.get('amount')}")
             
-            if st.button("✅ 确认保存", type="primary", use_container_width=True):
+            if st.button("✅ 确认保存", type="primary", width="stretch"):
                 try:
                     payload = {
                         "date": draft.get('date'),
@@ -472,12 +571,14 @@ if sel_categories:
 # ==========================
 # TAB 1: DASHBOARD
 # ==========================
-with tab_dash:
+if main_nav == "📊 仪表盘":
+    if "dashboard_page" not in st.session_state:
+        st.session_state.dashboard_page = 0
     # Manual Refresh Button
     c_ref_1, c_ref_2 = st.columns([0.85, 0.15])
     with c_ref_1: st.empty() # Spacer
     with c_ref_2:
-        if st.button("🔄 刷新数据", use_container_width=True, key="btn_refresh_dash"):
+        if st.button("🔄 刷新数据", width="stretch", key="btn_refresh_dash"):
             st.cache_data.clear()
             st.rerun()
 
@@ -491,53 +592,86 @@ with tab_dash:
     
     st.divider()
     
-    # Budgets
-    st.subheader(f"📊 预算进度 ({target_month_for_budget})")
-    budgets = get_budgets()
-    
-    # Calculate budget spending based on the target month (ignoring other filters for accurate progress)
-    df_budget_calc = df.copy()
-    if "月(yyyy-mm)" in df_budget_calc.columns:
-        df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == target_month_for_budget]
-
-    if budgets:
-        b_cols = st.columns(3)
-        for i, b in enumerate(budgets):
-            spent = df_budget_calc[df_budget_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_budget_calc.columns else 0
-            limit = b["amount"]
-            pct = spent / limit if limit > 0 else 0
-            with b_cols[i % 3]:
-                st.markdown(f"**{b['category']}**")
-                st.progress(min(pct, 1.0))
-                st.caption(f"${spent:,.0f} / ${limit:,.0f}")
-    else:
-        st.info("暂无预算，请在“设置”中添加。")
+    # Carousel Navigation
+    k3.metric("📝 记录笔数", f"{len(df_view)}")
     
     st.divider()
+    
+    # Carousel Navigation
+    # Use standard columns for navigation
+    col_prev, col_title, col_next = st.columns([1, 4, 1])
+    
+    view_titles = ["📊 预算进度", "📈 月度趋势", "🥧 分类占比"]
+    current_page = st.session_state.dashboard_page
+    
+    # 1. Render Buttons
+    with col_prev:
+        clicked_prev = st.button("⬅️", key="btn_prev", width="stretch")
+            
+    with col_next:
+        clicked_next = st.button("➡️", key="btn_next", width="stretch")
 
-    # --- CHARTS ---
-    left, right = st.columns([2, 1])
+    # 2. Render Title
+    with col_title:
+        st.markdown(f"<h3 style='text-align: center; margin: 0; padding: 0;'>{view_titles[current_page]}</h3>", unsafe_allow_html=True)
+        
+    # 3. Update State Logic
+    # 3. Update State Logic
+    if clicked_prev:
+        st.session_state.dashboard_page = (st.session_state.dashboard_page - 1) % 3
+        
+    if clicked_next:
+        st.session_state.dashboard_page = (st.session_state.dashboard_page + 1) % 3
+        
+    # Get Updated State
+    current_page = st.session_state.dashboard_page
 
-    with left:
-        st.subheader("📈 月度趋势")
-        if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns:
-            month_sum = df.groupby("月(yyyy-mm)", as_index=False)["有效金额"].sum().sort_values("月(yyyy-mm)")
-            fig_bar = px.bar(month_sum, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
-            fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10))
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.warning("暂无数据")
+    # Carousel Frame (Fixed Height, Static Border)
+    with st.container(height=400, border=True):
+        if current_page == 0:
+            # === BUDGET VIEW ===
+            budgets = get_budgets()
+            
+            # Calculate budget spending based on the target month
+            df_budget_calc = df.copy()
+            if "月(yyyy-mm)" in df_budget_calc.columns:
+                df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == target_month_for_budget]
 
-    with right:
-        st.subheader("🥧 分类占比")
-        if not df_view.empty and "分类" in df_view.columns:
-            cat_sum = df_view.groupby("分类", as_index=False)["有效金额"].sum().sort_values("有效金额", ascending=False)
-            fig_pie = px.pie(cat_sum, names="分类", values="有效金额", hole=0.4)
-            fig_pie.update_layout(height=300, margin=dict(l=10, r=10, t=30, b=10), showlegend=False)
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
-        else:
-            st.warning("暂无数据")
+            if budgets:
+                # Use full width instead of columns for better mobile view in carousel
+                for b in budgets:
+                    spent = df_budget_calc[df_budget_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_budget_calc.columns else 0
+                    limit = b["amount"]
+                    
+                    # Custom Progress Bar
+                    st.markdown(f"**{b['category']}**")
+                    progress_html = render_budget_progress(spent, limit)
+                    st.markdown(progress_html, unsafe_allow_html=True)
+                    st.write("") # Gap
+            else:
+                st.info("暂无预算，请在“设置”中添加。")
+
+        elif current_page == 1:
+            # === TREND VIEW ===
+            if "月(yyyy-mm)" in df.columns and "有效金额" in df.columns:
+                month_sum = df.groupby("月(yyyy-mm)", as_index=False)["有效金额"].sum().sort_values("月(yyyy-mm)")
+                fig_bar = px.bar(month_sum, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
+                fig_bar.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=10))
+                # Use dynamic key to force re-render and trigger animation
+                st.plotly_chart(fig_bar, width="stretch", key=f"chart_trend_{current_page}")
+            else:
+                st.warning("暂无数据")
+
+        elif current_page == 2:
+            # === CATEGORY VIEW ===
+            if not df_view.empty and "分类" in df_view.columns:
+                cat_sum = df_view.groupby("分类", as_index=False)["有效金额"].sum().sort_values("有效金额", ascending=False)
+                fig_pie = px.pie(cat_sum, names="分类", values="有效金额", hole=0.4)
+                fig_pie.update_layout(height=350, margin=dict(l=10, r=10, t=30, b=10), showlegend=True)
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_pie, width="stretch", key=f"chart_cat_{current_page}")
+            else:
+                st.warning("暂无数据")
 
     st.divider()
 
@@ -559,34 +693,35 @@ with tab_dash:
             "金额": st.column_config.NumberColumn("金额", format="$%.2f", width="small"),
             "分类": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="small"),
             "备注": st.column_config.TextColumn("备注", width="medium"),
-            "id": st.column_config.TextColumn("ID", disabled=True)
+            "id": None # Hide ID column
         }
         
-        # Use a key to access state
-        edited = st.data_editor(
-            df_edit[edit_cols], 
-            column_config=col_cfg, 
-            hide_index=True, 
-            num_rows="fixed", 
-            key="editor",
-            use_container_width=True
-        )
-        
-        # Button Logic
-        # Calculate selected deletes
-        to_delete = edited[edited["删除"] == True]
-        delete_count = len(to_delete)
-        
-        btn_label = "💾 保存修改"
-        btn_type = "primary"
-        if delete_count > 0:
-            btn_label = f"🗑️ 确认删除 ({delete_count} 条)"
-            btn_type = "secondary"
+        # Wrap in form to prevent rerun on interaction (fix tab jump)
+        with st.form("editor_form"):
+            # Use a key to access state
+            edited = st.data_editor(
+                df_edit[edit_cols], 
+                column_config=col_cfg, 
+                hide_index=True, 
+                num_rows="fixed", 
+                key="editor",
+                use_container_width=True
+            )
             
-        if st.button(btn_label, type=btn_type, use_container_width=True):
+            submit = st.form_submit_button("💾 保存修改 / 🗑️ 删除选中 (Submit Changes)", type="primary", use_container_width=True)
+        
+        if submit:
             changes_made = False
             
             # 1. Handle Deletes first
+            # Re-fetch editor state from session state (or use return value 'edited' directly inside form logic context)
+            # 'edited' variable holds the current state including user changes before submit if we use it here? 
+            # Actually st.data_editor returns the state *after* interaction.
+            # But inside form, it returns the state at the time of submit? Yes.
+            
+            to_delete = edited[edited["删除"] == True]
+            delete_count = len(to_delete)
+            
             if delete_count > 0:
                 # Batch delete if possible, or loop
                 ids_to_del = to_delete["id"].tolist()
@@ -623,9 +758,9 @@ with tab_dash:
                             changes_made = True
                     except IndexError:
                         pass # Should not happen if state is consistent
-                
-                if changes_made and delete_count == 0:
-                    st.success("修改已保存")
+            
+            if changes_made and delete_count == 0:
+                st.success("修改已保存")
             
             if changes_made:
                 time.sleep(1)
@@ -635,7 +770,7 @@ with tab_dash:
 # ==========================
 # TAB 2: SETTINGS
 # ==========================
-with tab_settings:
+if main_nav == "⚙️ 设置":
     st.header("⚙️ 设置")
     with st.expander("预算管理"):
         with st.form("add_budget"):
