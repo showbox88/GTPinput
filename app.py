@@ -334,7 +334,6 @@ def check_and_process_recurring():
                         "user_id": st.session_state["user"].id
                     }
                     supabase.table("expenses").insert(payload).execute()
-                    supabase.table("expenses").insert(payload).execute()
                     count_added += 1
                     details.append(f"✅ 添加成功: {rule['name']}")
                 else:
