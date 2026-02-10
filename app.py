@@ -954,14 +954,7 @@ if main_nav == "⚙️ 设置":
         else:
             st.caption("暂无预算设置")
 
-        if c_check.button("🔄 立即检查今日应扣费 (Check Now)"):
-           with st.spinner("检查中..."):
-               res_msg = check_and_process_recurring()
-               # Store message in session state to survive rerun
-               st.session_state["recurring_msg"] = res_msg
-               st.session_state["recurring_expanded"] = True # Keep expanded
-               time.sleep(0.5)
-               st.rerun()
+
 
     if "recurring_msg" in st.session_state:
         msg = st.session_state["recurring_msg"]
@@ -984,7 +977,16 @@ if main_nav == "⚙️ 设置":
         # The code above prints message *before* expander. That is good.
         
         st.write("设置每月/每年的固定支出。")
-        
+        c_check, c_dummy = st.columns([1, 2])
+        if c_check.button("🔄 立即检查今日应扣费 (Check Now)"):
+           with st.spinner("检查中..."):
+               res_msg = check_and_process_recurring()
+               # Store message in session state to survive rerun
+               st.session_state["recurring_msg"] = res_msg
+               st.session_state["recurring_expanded"] = True # Keep expanded
+               time.sleep(0.5)
+               st.rerun()
+
         # Add New Rule
         with st.form("add_recurring"):
             cols = st.columns(4)
