@@ -557,6 +557,10 @@ with st.sidebar:
         cats = sorted(df["分类"].dropna().unique().tolist())
         sel_categories = st.multiselect("分类", options=cats, default=[])
 
+    if st.button("🔄 刷新数据 (Refresh)", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
 # Apply Filter
 df_view = df.copy()
 target_month_for_budget = pd.Timestamp.today().strftime("%Y-%m")
@@ -574,14 +578,6 @@ if sel_categories:
 if main_nav == "📊 仪表盘":
     if "dashboard_page" not in st.session_state:
         st.session_state.dashboard_page = 0
-    # Manual Refresh Button
-    c_ref_1, c_ref_2 = st.columns([0.85, 0.15])
-    with c_ref_1: st.empty() # Spacer
-    with c_ref_2:
-        if st.button("🔄 刷新数据", width="stretch", key="btn_refresh_dash"):
-            st.cache_data.clear()
-            st.rerun()
-
     # KPI
     this_month = pd.Timestamp.today().strftime("%Y-%m")
     month_total = df[df["月(yyyy-mm)"] == this_month]["有效金额"].sum() if "月(yyyy-mm)" in df.columns else 0
@@ -593,9 +589,6 @@ if main_nav == "📊 仪表盘":
     st.divider()
     
     # Carousel Navigation
-    k3.metric("📝 记录笔数", f"{len(df_view)}")
-    
-    st.divider()
     
     # Carousel Navigation
     # Use standard columns for navigation
