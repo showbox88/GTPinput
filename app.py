@@ -17,7 +17,7 @@ except ImportError:
 st.set_page_config(
     page_title="GTPinput",
     page_icon="💰",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="expanded",
 )
 
@@ -128,16 +128,11 @@ if not st.session_state.get("session"):
     login_form()
     st.stop()
 
-# Adding a logout button in sidebar
+# Adding a logout button in sidebar - REMOVED, moved to Settings Tab
 with st.sidebar:
-    user_email = st.session_state["user"].email if st.session_state.get("user") else "Unknown"
-    st.write(f"当前用户: {user_email}")
-    if st.button("登出 (Logout)"):
-        supabase.auth.sign_out()
-        delete_session_file() # Clear local cache
-        st.session_state["session"] = None
-        st.session_state["user"] = None
-        st.rerun()
+    # user_email = st.session_state["user"].email if st.session_state.get("user") else "Unknown"
+    # st.write(f"当前用户: {user_email}")
+    pass
 
 # ====== DATA LOADING ======
 @st.cache_data(ttl=5) # Short cache for responsiveness
@@ -233,22 +228,42 @@ def get_recurring_rules():
     except:
         return []
 
-def add_recurring(name, amount, category, frequency, day):
-    try:
-        payload = {
-            "name": name, 
-            "amount": float(amount), 
-            "category": category, 
-            "frequency": frequency, 
-            "day": int(day),
-            "user_id": st.session_state["user"].id
-        }
-        supabase.table("recurring_rules").insert(payload).execute()
-        return True
-    except Exception as e:
-        st.error(f"添加失败: {e}")
-        return False
+def add_recurring(name, amount, category, frequency, start_date):
+    """
+    Adds a recurring rule.
+    start_date: datetime.date object from st.date_input
+    """
+    # Derive day/month based on frequency
+    # Storage Protocol:
+    # Monthly: day = 1-31
+    # Weekly:  day = 0-6 (Mon-Sun)
+    # Yearly:  day = 1-31, month = 1-12 (Need to check if month col exists, assuming we add it or just stick to day for now?)
+    # For now, let's implement Weekly and Monthly.
+    
+    day_val = start_date.day
+    if frequency == "Weekly":
+        day_val = start_date.weekday() # 0=Mon, 6=Sun
+    
+    # Payload
+    payload = {
+        "name": name,
+        "amount": amount,
+        "category": category,
+        "frequency": frequency,
+        "day": day_val,
+        "active": True,
+        "user_id": st.session_state["user"].id
+    }
+    # Optional: If schema supports 'month' for Yearly
+    if frequency == "Yearly":
+        # Check if we can store month. If not, maybe store day as MMDD? 
+        # Let's keep it simple: If Yearly, just store day, but we really need month.
+        # Assuming we might just support Monthly/Weekly fully for now.
+        pass
 
+    supabase.table("recurring_rules").insert(payload).execute()
+
+def delete_recurring(rid):
     try:
         supabase.table("recurring_rules").delete().eq("id", rid).execute()
         return True
@@ -257,7 +272,7 @@ def add_recurring(name, amount, category, frequency, day):
 
 def check_and_process_recurring():
     """
-    Manually check if any recurring rules match today's date and add them if not already added this month.
+    Manually check if any recurring rules match today's date/weekday and add them if not already added this cycle.
     """
     try:
         rules = get_recurring_rules()
@@ -266,90 +281,116 @@ def check_and_process_recurring():
         
         today = pd.Timestamp.today()
         current_day = today.day
+        current_weekday = today.weekday() # 0=Mon
         current_month_str = today.strftime("%Y-%m")
+        
+        # specific for Weekly check
+        # For weekly, we need to check if we added it "this week".
+        # Identifier: rule_id + year + week_number?
+        current_week_iso = today.isocalendar()[1] 
+        current_year = today.year
+        
         count_added = 0
         details = []
         
-        details.append(f"📅 Check Date: {today.strftime('%Y-%m-%d')}")
+        # details.append(f"📅 Date: {today.strftime('%Y-%m-%d')} (Day {current_day}, Weekday {current_weekday})")
 
         for rule in rules:
-            # 1. Check if today matches the rule's day (Simple Version: Only trigger on exact day or if force checked?)
-            # Let's be smart: If today >= rule_day and no record exists for this month, add it.
-            # This handles case where user forgets to check on the exact day.
+            rule_name = rule.get("name")
+            target_day = int(rule.get("day", 1))
+            freq = rule.get("frequency", "Monthly")
             
-            try:
-                rule_day = int(rule.get("day", 1))
-            except:
-                rule_day = 1
+            should_process = False
+            start_date_check = ""
+            end_date_check = ""
             
-            # Simple Logic: If today is past or equal to the due day
-            if current_day >= rule_day:
-                # 2. Check if already added for this month
-                # unique identifier: rule_id + month
-                # We can query expenses with specific note format or just trust user?
-                # Best way: Check expenses table for item == rule_name and date startswith current_month
+            # --- LOGIC SELECTION ---
+            if freq == "Weekly":
+                # Check if today is the day (or past it in this week if we want catch-up? No, usually exact day or catch-up)
+                # Let's do: If today.weekday() == target_day OR (today.weekday() > target_day and not paid this week)
                 
-                # Construct a query to find existing record
-                # Note: This is an approximation. Ideally we have a linkage table. 
-                # But for personal app, matching Name + Category + Amount + Month is sufficient.
+                # Simple Manual Trigger: If today >= target_day (in current week) 
+                # But logic is tricky if today is Mon(0) and target is Sun(6).
+                # Let's stick to strict: Is today matching, or catch up?
+                # Catch up for weekly: If record doesn't exist for *this week*.
                 
-                # Calculate accurate end of month to avoid DB errors (e.g. Feb 31 is invalid)
-                start_date = f"{current_month_str}-01"
+                # Check period: Monday of this week to Sunday of this week
+                start_of_week = today - pd.Timedelta(days=today.weekday())
+                end_of_week = start_of_week + pd.Timedelta(days=6)
+                
+                start_date_check = start_of_week.strftime("%Y-%m-%d")
+                end_date_check = end_of_week.strftime("%Y-%m-%d")
+                
+                # If today's weekday >= target weekday, it might be due
+                if current_weekday >= target_day:
+                    should_process = True
+                else:
+                    details.append(f"⏳ 跳过 (未到周{target_day+1}): {rule_name}")
+
+            elif freq == "Yearly":
+                 # Not fully supported yet without month col, skip or treat as monthly?
+                 # Treat as Monthly for safety if logic missing
+                 pass
+
+            else: # Default Monthly
+                # Check period: Start of Month to End of Month
+                start_date_check = f"{current_month_str}-01"
                 last_day = pd.Timestamp(today.year, today.month, 1) + pd.offsets.MonthEnd(0)
-                end_date = last_day.strftime("%Y-%m-%d")
+                end_date_check = last_day.strftime("%Y-%m-%d")
                 
+                if current_day >= target_day:
+                    should_process = True
+                else:
+                    details.append(f"⏳ 跳过 (未到{target_day}号): {rule_name}")
+            
+            # --- EXECUTION ---
+            if should_process:
+                # Check duplicates
                 res = supabase.table("expenses") \
                     .select("*") \
-                    .eq("item", rule["name"]) \
+                    .eq("item", rule_name) \
                     .eq("category", rule["category"]) \
-                    .gte("date", start_date) \
-                    .lte("date", end_date) \
-                    .execute() # Removed strict amount check to be safer, or keep it? 
-                    # Actually keeping item+category+date is safer. Amount might change.
-                    # But if user manually added "Electric Bill" with different amount, we might not want to double charge?
-                    # Let's trust existing logic but add Debug info if needed. 
-                    # ISSUE: 'amount' in rule is numeric, in DB might be float. 
-                    # Let's remove .eq("amount") to avoid float precision issues causing "Not Found" result (which would cause Duplicate add)
-                    # WAIT, if it returns "Not Found", it adds it. The user says "Seems not recorded", meaning it returned "Already exists" (res.data is having content) OR it failed day check.
-                    # Screenshot: "Effective Amount" logic in load_data uses "amount".
-                    # Let's debug by simplifying: Just check Item Name + Current Month.
+                    .gte("date", start_date_check) \
+                    .lte("date", end_date_check) \
+                    .execute()
                 
                 if not res.data:
-                    # Not found -> Add it!
-                    # Construct date: use this month's specific day
-                    # Handle invalid days (e.g. Feb 30) -> limit to month end
-                    try:
-                        due_date = pd.Timestamp(year=today.year, month=today.month, day=rule_day)
-                    except ValueError:
-                         # Fallback to last day of month if day is invalid (e.g. 31st in Feb)
-                         due_date = pd.Timestamp(year=today.year, month=today.month, day=1) + pd.offsets.MonthEnd(0)
+                    # Add IT!
+                    # Calculate due date
+                    due_date = today # Default to today
+                    
+                    if freq == "Monthly":
+                        try:
+                            due_date = pd.Timestamp(year=today.year, month=today.month, day=target_day)
+                        except: # Invalid day (e.g. 31 in Feb)
+                            due_date = pd.Timestamp(year=today.year, month=today.month, day=1) + pd.offsets.MonthEnd(0)
+                    elif freq == "Weekly":
+                        # Date = Start of week + target_weekday
+                        # start_of_week defined above
+                        start_of_week = today - pd.Timedelta(days=today.weekday())
+                        due_date = start_of_week + pd.Timedelta(days=target_day)
 
                     payload = {
                         "date": due_date.strftime("%Y-%m-%d"),
-                        "item": rule["name"],
+                        "item": rule_name,
                         "amount": float(rule["amount"]),
                         "category": rule["category"],
-                        "note": "🔄 自动订阅 (App触发)",
+                        "note": f"🔄 自动订阅 ({freq})",
                         "source": "recurring_rule",
                         "user_id": st.session_state["user"].id
                     }
                     supabase.table("expenses").insert(payload).execute()
                     count_added += 1
-                    details.append(f"✅ 添加成功: {rule['name']}")
+                    details.append(f"✅ 添加成功: {rule_name}")
                 else:
-                    # Already exists
-                    details.append(f"⏭️ 跳过 (已存在): {rule['name']} (Found {len(res.data)} records)")
-            else:
-                 details.append(f"⏳ 跳过 (未到期): {rule['name']} (Due: {rule_day}, Today: {current_day})")
+                    details.append(f"⏭️ 跳过 (本期已付): {rule_name}")
         
         if count_added > 0:
             st.cache_data.clear()
-            return f"成功添加 {count_added} 笔订阅支出:\n" + "\n".join(details)
+            return f"成功添加 {count_added} 笔订阅:\n" + "\n".join(details)
         else:
-            # Show debug info if nothing added
-            debug_msg = "没有发现新的应扣费项目 (No new items added).\n"
-            if len(details) > 0: # If we have log details of skips
-                debug_msg += "\nDetails:\n" + "\n".join(details)
+            debug_msg = "✅ 所有到期订阅已记录 (No new items).\n"
+            # if details: debug_msg += "详情:\n" + "\n".join(details)
             return debug_msg
 
     except Exception as e:
@@ -860,223 +901,263 @@ if main_nav == "📊 仪表盘":
                 st.rerun()
 
 # ==========================
-# TAB 2: SETTINGS
+# TAB 2: SETTINGS (Redesigned)
 # ==========================
 if main_nav == "⚙️ 设置":
-    st.header("⚙️ 设置")
-    with st.expander("预算管理"):
-        with st.form("add_budget"):
-            c1, c2 = st.columns(2)
-            b_cat = c1.selectbox("分类", CATEGORIES)
-            b_amt = c2.number_input("限额", min_value=0)
-            if st.form_submit_button("添加预算"):
-                add_budget(f"{b_cat}预算", b_cat, b_amt, "#FF4B4B", "💰")
+    # Custom CSS for Settings Page
+    st.markdown("""
+    <style>
+        /* Card Style */
+        .stContainer {
+            background-color: #1E2530;
+            border: 1px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        
+        /* Section Headers */
+        h3 {
+            color: #56CCF2 !important;
+            font-weight: 600;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #2E86C1;
+            padding-bottom: 5px;
+            display: inline-block;
+        }
+        
+        /* Small Help Text */
+        .help-text {
+            color: #888;
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Header / User Info
+    with st.container(border=True):
+        c_user, c_logout = st.columns([0.8, 0.2])
+        with c_user:
+            st.markdown(f"### 👤 账户信息")
+            st.caption(f"当前登录: **{st.session_state['user'].email}**")
+        with c_logout:
+            st.write("") # Spacer
+            if st.button("🚪 登出 (Logout)", use_container_width=True, type="secondary"):
+                supabase.auth.sign_out()
+                delete_session_file()
+                st.session_state["session"] = None
+                st.session_state["user"] = None
                 st.rerun()
-                
-        # List budgets to delete/edit
-        cur_budgets = get_budgets()
-        if cur_budgets:
-            df_budgets = pd.DataFrame(cur_budgets)
-            # Ensure proper types
-            if "amount" in df_budgets.columns:
-                df_budgets["amount"] = pd.to_numeric(df_budgets["amount"], errors="coerce").fillna(0)
+
+    st.write("") # Gap
+
+    # Main Grid
+    col_budget, col_recurring = st.columns(2, gap="medium")
+
+    # === LEFT: BUDGET MANAGEMENT ===
+    with col_budget:
+        with st.container(border=True):
+            st.markdown("### 💰 预算管理")
+            st.markdown("<p class='help-text'>设置分类限额，监控消费进度。</p>", unsafe_allow_html=True)
             
-            # Configure editor
-            b_cfg = {
-                "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, required=True),
-                "amount": st.column_config.NumberColumn("限额", min_value=0, step=100),
-                "name": st.column_config.TextColumn("名称"),
-                "id": None, "user_id": None, "icon": None, "color": None, "created_at": None
-            }
-            
-            with st.form("budget_editor"):
-                # Use data_editor with num_rows="dynamic" to allow adding/deleting rows directly? 
-                # For now stick to strict editing existing, and keep the Add form separate for clarity unless merged.
-                # Merging "Add" into the table is cleaner but requires handling new rows in backend.
-                # Let's keep Add separate for now to avoid complexity, just allow Edit/Delete here.
+            # 1. Add New Budget (Inline Form)
+            with st.expander("➕ 添加新预算", expanded=False):
+                with st.form("add_budget_form", border=False):
+                    ab_c1, ab_c2 = st.columns(2)
+                    b_cat = ab_c1.selectbox("分类", CATEGORIES, key="add_b_cat")
+                    b_amt = ab_c2.number_input("限额 ($)", min_value=0, step=100, key="add_b_amt")
+                    if st.form_submit_button("确认添加", use_container_width=True):
+                        # Icon mapping
+                        icon_map = {"餐饮":"🍔", "交通":"🚗", "日用品":"🛒", "服饰":"👔", "娱乐":"🎮", "医疗":"💊", "居住":"🏠", "其他":"📦"}
+                        icon = icon_map.get(b_cat, "💰")
+                        add_budget(f"{b_cat}预算", b_cat, b_amt, "#2F80ED", icon) # Default Blue
+                        st.rerun()
+
+            # 2. List & Edit Budgets
+            cur_budgets = get_budgets()
+            if cur_budgets:
+                df_budgets = pd.DataFrame(cur_budgets)
+                if "amount" in df_budgets.columns:
+                    df_budgets["amount"] = pd.to_numeric(df_budgets["amount"], errors="coerce").fillna(0)
                 
+                df_budgets["delete"] = False
+                
+                b_cfg = {
+                    "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, required=True, width="medium"),
+                    "amount": st.column_config.NumberColumn("限额", min_value=0, step=100, format="$%d"),
+                    "delete": st.column_config.CheckboxColumn("🗑️ 删除", width="small", default=False),
+                    "name": None, "id": None, "user_id": None, "icon": None, "color": None, "created_at": None
+                }
+                
+                st.caption("📝 编辑列表 (可修改/删除):")
                 edited_b = st.data_editor(
                     df_budgets,
                     column_config=b_cfg,
                     use_container_width=True,
                     hide_index=True,
-                    key="budget_editor",
-                    num_rows="dynamic" # Allow delete
+                    key="budget_editor_new",
+                    num_rows="dynamic" # Allow add/delete rows
                 )
-                submit_b = st.form_submit_button("💾 保存预算修改 (Save Changes)")
-            
-            if submit_b:
-                # 1. Handle Deletes
-                # Find missing IDs
-                current_ids = set(df_budgets["id"].tolist())
-                new_ids_in_editor = set() 
                 
-                # Rows in edited_b might include new rows without ID (if added via table)
-                # But if we only allow delete/edit existing:
-                for idx, row in edited_b.iterrows():
-                    if "id" in row and pd.notna(row["id"]):
-                        new_ids_in_editor.add(row["id"])
-                
-                # IDs present before but missing now -> Deleted
-                deleted_ids = current_ids - new_ids_in_editor
-                for d_id in deleted_ids:
-                    delete_budget(d_id)
-                
-                # 2. Handle Updates (and Adds if supported)
-                # Check for changes
-                # Since we wrapped in Form, 'edited_b' is the final state.
-                # We can iterate and upsert.
-                
-                changes_count = 0
-                for index, row in edited_b.iterrows():
-                    # If it has an ID, it's an update
-                    if "id" in row and pd.notna(row["id"]):
-                        # Check if different from original
-                        # Optimization: We could compare, or just upsert all for simplicity in this scale
+                if st.button("💾 保存预算变更", key="btn_save_budgets", use_container_width=True):
+                    # Handle Explicit Deletes via Checkbox
+                    to_delete = edited_b[edited_b["delete"] == True]
+                    for idx, row in to_delete.iterrows():
+                        if "id" in row and pd.notna(row["id"]):
+                            delete_budget(row["id"])
+                    
+                    # Handle implicit row deletes (if user used the trash icon)
+                    current_ids = set(df_budgets["id"].tolist())
+                    new_ids = set([r["id"] for i, r in edited_b.iterrows() if "id" in r and pd.notna(r["id"])])
+                    deleted_rows_ids = current_ids - new_ids
+                    for d_id in deleted_rows_ids:
+                        delete_budget(d_id)
+
+                    # Handle Updates (Only for non-deleted rows)
+                    updates = 0
+                    for idx, row in edited_b.iterrows():
+                        if row["delete"] == True: continue # Skip if marked for delete
                         
-                        # Only update if fields changed - but simple upsert is fine for <50 items
-                        try:
-                            # Construct payload ensuring types
-                            payload = {
-                                "category": row["category"],
-                                "amount": float(row["amount"]),
-                                "name": row["name"]
-                            }
-                            supabase.table("budgets").update(payload).eq("id", row["id"]).execute()
-                            changes_count += 1
-                        except Exception as e:
-                            st.error(f"Error updating budget {row.get('name')}: {e}")
-                            
-                if changes_count > 0 or len(deleted_ids) > 0:
-                    st.success("预算设置已更新")
-                    time.sleep(1)
-                    st.cache_data.clear()
+                        if "id" in row and pd.notna(row["id"]):
+                             try:
+                                 payload = {"category": row["category"], "amount": float(row["amount"])}
+                                 supabase.table("budgets").update(payload).eq("id", row["id"]).execute()
+                                 updates += 1
+                             except: pass
+                    
+                    if updates > 0 or not to_delete.empty or deleted_rows_ids:
+                        st.success("✅ 预算已更新")
+                        time.sleep(1)
+                        st.cache_data.clear()
+                        st.rerun()
+            else:
+                st.info("尚未设置预算")
+
+
+    # === RIGHT: RECURRING EXPENSES ===
+    with col_recurring:
+        with st.container(border=True):
+            st.markdown("### 🔄 订阅/固定支出")
+            st.markdown("<p class='help-text'>管理每期的固定扣费项目。</p>", unsafe_allow_html=True)
+
+            # Check Button
+            if st.button("⚡ 立即检查今日扣费", use_container_width=True, type="primary"):
+                with st.spinner("检查中..."):
+                    res_msg = check_and_process_recurring()
+                    st.session_state["recurring_msg_new"] = res_msg
                     st.rerun()
-        else:
-            st.caption("暂无预算设置")
 
+            if "recurring_msg_new" in st.session_state:
+                st.info(st.session_state["recurring_msg_new"])
+                del st.session_state["recurring_msg_new"]
 
+            st.write("")
 
-    if "recurring_msg" in st.session_state:
-        msg = st.session_state["recurring_msg"]
-        if "成功" in msg or "添加成功" in msg:
-            st.success(msg)
-        else:
-            st.info(msg)
-        # Clear after showing
-        del st.session_state["recurring_msg"]
-
-    # Use state to control expander
-    expanded_state = st.session_state.get("recurring_expanded", False)
-    with st.expander("订阅/固定支出 (Recurring Expenses)", expanded=expanded_state):
-        # Reset expander state logic? No, let it stay open if user is working here.
-        # But if they click "Check Now", we want it open.
-        # If they normally open it, it's manual.
-        # st.expander doesn't support dynamic 'expanded' update easily without key hack or rerun.
-        # Let's just put the message *outside* or ensure it's seen.
-        # Actually, if I move the message *above* the expander (or inside if open), it works.
-        # The code above prints message *before* expander. That is good.
-        
-        st.write("设置每月/每年的固定支出。")
-        c_check, c_dummy = st.columns([1, 2])
-        if c_check.button("🔄 立即检查今日应扣费 (Check Now)"):
-           with st.spinner("检查中..."):
-               res_msg = check_and_process_recurring()
-               # Store message in session state to survive rerun
-               st.session_state["recurring_msg"] = res_msg
-               st.session_state["recurring_expanded"] = True # Keep expanded
-               time.sleep(0.5)
-               st.rerun()
-
-        # Add New Rule
-        with st.form("add_recurring"):
-            cols = st.columns(4)
-            r_name = cols[0].text_input("名称 (e.g. Netflix)")
-            r_amt = cols[1].number_input("金额", min_value=0.0, step=1.0)
-            r_cat = cols[2].selectbox("分类", CATEGORIES, key="r_cat")
-            r_freq = cols[3].selectbox("周期", ["Monthly", "Yearly"])
-            r_day = st.number_input("扣款日 (Day of Month)", min_value=1, max_value=31, value=1)
-            
-            if st.form_submit_button("添加订阅"):
-                add_recurring(r_name, r_amt, r_cat, r_freq, r_day)
-                st.success(f"已添加: {r_name}")
-                time.sleep(1)
-                st.rerun()
-
-        # List Rules
-        rules = get_recurring_rules()
-        if rules:
-            st.write("📋 订阅管理 (Edit/Delete):")
-            df_rules = pd.DataFrame(rules)
-            
-             # Configure editor
-            r_cfg = {
-                "name": st.column_config.TextColumn("名称", required=True),
-                "amount": st.column_config.NumberColumn("金额", min_value=0.0, step=1.0, required=True),
-                "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, required=True),
-                "frequency": st.column_config.SelectboxColumn("周期", options=["Monthly", "Yearly"], required=True),
-                "day": st.column_config.NumberColumn("扣款日", min_value=1, max_value=31),
-                "id": None, "user_id": None, "active": None, "created_at": None, "last_triggered": None
-            }
-            
-            with st.form("rule_editor"):
+            # 1. Add New
+            with st.expander("➕ 添加新订阅", expanded=False):
+                # Add New Rule
+                with st.form("add_recurring"):
+                    # New Order: Name -> Category -> Amount -> Frequency -> Date
+                    cols = st.columns([1.5, 1, 1]) 
+                    r_name = cols[0].text_input("📝 名称 (e.g. Netflix)")
+                    r_cat = cols[1].selectbox("📂 分类", CATEGORIES, key="r_cat")
+                    r_amt = cols[2].number_input("💲 金额", min_value=0.0, step=1.0)
+                    
+                    cols2 = st.columns([1, 1.5])
+                    r_freq = cols2[0].selectbox("🔄 周期", ["Monthly", "Weekly", "Yearly"])
+                    
+                    # Smart Date Label
+                    date_label = "📅 首次扣款日期 (将自动提取日/星期)"
+                    r_date = cols2[1].date_input(date_label, value=pd.Timestamp.today())
+                    
+                    # Helper text
+                    if r_freq == "Monthly":
+                        st.caption(f"ℹ️ 将在每月 **{r_date.day}日** 扣款")
+                    elif r_freq == "Weekly":
+                        weekdays = ["周一","周二","周三","周四","周五","周六","周日"]
+                        st.caption(f"ℹ️ 将在每周 **{weekdays[r_date.weekday()]}** 扣款")
+                    
+                    if st.form_submit_button("✅ 确认添加", use_container_width=True, type="primary"):
+                        add_recurring(r_name, r_amt, r_cat, r_freq, r_date)
+                        st.success(f"已添加: {r_name}")
+                        time.sleep(1)
+                        st.rerun()
+            # 2. List & Edit
+            rules = get_recurring_rules()
+            if rules:
+                df_rules = pd.DataFrame(rules)
+                df_rules["delete"] = False # Add delete column
+                
+                r_cfg = {
+                    "name": st.column_config.TextColumn("名称", required=True, width="medium"),
+                    "amount": st.column_config.NumberColumn("金额", format="$%.2f", width="small"),
+                    "day": st.column_config.NumberColumn("日/W", min_value=0, max_value=31, width="small", help="1-31 for Month, 0-6 for Week"),
+                    "delete": st.column_config.CheckboxColumn("🗑️ 删除", width="small", default=False),
+                    "category": None, "frequency": None, 
+                    "id": None, "user_id": None, "active": None, "created_at": None, "last_triggered": None
+                }
+                # Maybe show compact view
+                st.caption("📝 订阅列表 (支持删除):")
                 edited_r = st.data_editor(
-                    df_rules,
+                    df_rules[["id", "name", "amount", "day", "category", "delete"]], # Select cols
                     column_config=r_cfg,
                     use_container_width=True,
                     hide_index=True,
-                    key="rule_editor",
+                    key="rule_editor_new",
                     num_rows="dynamic"
                 )
-                submit_r = st.form_submit_button("💾 保存订阅修改 (Save Changes)")
                 
-            if submit_r:
-                # 1. Deletes
-                cur_r_ids = set(df_rules["id"].tolist())
-                new_r_ids = set()
-                for idx, row in edited_r.iterrows():
-                    if "id" in row and pd.notna(row["id"]):
-                        new_r_ids.add(row["id"])
-                
-                del_r_ids = cur_r_ids - new_r_ids
-                for d_id in del_r_ids:
-                    delete_recurring(d_id)
-                
-                # 2. Updates
-                r_changes = 0
-                for index, row in edited_r.iterrows():
-                    if "id" in row and pd.notna(row["id"]):
-                         try:
-                            payload = {
-                                "name": row["name"],
-                                "amount": float(row["amount"]),
-                                "category": row["category"],
-                                "frequency": row["frequency"],
-                                "day": int(row["day"])
-                            }
-                            supabase.table("recurring_rules").update(payload).eq("id", row["id"]).execute()
-                            r_changes += 1
-                         except Exception as e:
-                            st.error(f"Error updating rule {row.get('name')}: {e}")
-                
-                if r_changes > 0 or len(del_r_ids) > 0:
-                     st.success("订阅规则已更新")
-                     time.sleep(1)
-                     st.rerun()
+                if st.button("💾 保存订阅变更", key="btn_save_recurring", use_container_width=True):
+                    # explicit delete
+                    to_delete_r = edited_r[edited_r["delete"] == True]
+                    for idx, row in to_delete_r.iterrows():
+                        delete_recurring(row["id"])
+                    
+                    # implicit delete
+                    curr_r_ids = set(df_rules["id"].tolist())
+                    new_r_ids = set([r["id"] for i, r in edited_r.iterrows() if "id" in r and pd.notna(r["id"])])
+                    deleted_r_rows = curr_r_ids - new_r_ids
+                    for d_id in deleted_r_rows:
+                        delete_recurring(d_id)
+                        
+                    # Updates
+                    updates_r = 0
+                    for idx, row in edited_r.iterrows():
+                        if row["delete"] == True: continue
+                        if "id" in row and pd.notna(row["id"]):
+                             try:
+                                 payload = {"name": row["name"], "amount": float(row["amount"]), "day": int(row["day"])}
+                                 supabase.table("recurring_rules").update(payload).eq("id", row["id"]).execute()
+                                 updates_r += 1
+                             except: pass
 
-        else:
-            st.caption("暂无固定支出")
+                    if updates_r > 0 or not to_delete_r.empty or deleted_r_rows:
+                        st.success("✅ 订阅已更新")
+                        time.sleep(1)
+                        st.cache_data.clear()
+                        st.rerun()
 
-    with st.expander("数据导出 (Export Data)"):
-        st.write("将所有账单数据导出为 CSV 文件。")
+            else:
+                st.info("暂无订阅")
+
+    st.write("") # Gap
+
+    # Footer: Data Management
+    with st.container(border=True):
+        st.markdown("### 📂 数据导出")
+        st.write("将所有历史账单数据导出为 CSV 文件备份。")
         if not df.empty:
-            csv = df.to_csv(index=False).encode('utf-8-sig') # BOM for Excel compatibility
+            csv = df.to_csv(index=False).encode('utf-8-sig')
             st.download_button(
-                "📥 下载 CSV",
+                "📥 下载 CSV 文件",
                 csv,
                 "expenses_backup.csv",
                 "text/csv",
-                key='download-csv'
+                key='download-csv-new',
+                use_container_width=True
             )
         else:
-            st.warning("暂无数据可导出")
+            st.button("📥 下载 CSV (无数据)", disabled=True, use_container_width=True)
+

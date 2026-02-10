@@ -1,20 +1,25 @@
 # Changelog
 
-## [Unreleased]
-
+## [V3.2] - 2026-02-10
 ### Added
-- **Persistent Login ("Remember Me")**: Added a checkbox on the login page to cache session tokens locally (`.session_cache`), allowing users to stay logged in across browser refreshes.
-- **Manual Data Refresh**: Added a "Refresh Data" button to the Dashboard tab to force clear the cache and reload data from Supabase.
-- **Chat UI Enhancements**:
-    - Replaced the global full-screen spinner with an inline "Thinking..." indicator.
-    - Added a custom CSS spinning halo animation for the thinking indicator.
-    - Improved login/signup UX by wrapping inputs in `st.form` to support "Enter" key submission.
-- **Data Sorting**: Dashboard now sorts records by Date (descending) and ID (descending) to ensure latest entries appear first.
+- **Responsive Layout**: Updated `app.py` to use `layout="wide"`, improving usability on desktop and mobile.
+- **Weekly Recurring Expenses**: Added logic to support `frequency="Weekly"` in both `app.py` and `scripts/cron_job.py`.
+- **Date Picker UI**: Replaced integer input with `st.date_input` for recurring expense start dates.
+- **Explicit Delete**: Added "Delete" checkbox columns to Budget and Recurring Expense data editors for easier management.
 
 ### Fixed
-- **OpenAI API Integration**: Resolved `400 Bad Request` error by adding `additionalProperties: false` to the JSON schema for Structured Outputs.
-- **Supabase Deployment**: Fixed a typo in the secret name (`OPENAPI_API_KEY` -> `OPENAI_API_KEY`) that prevented the Edge Function from accessing the key.
+- **Recurring Logic**: Fixed logic to correctly identify "Day of Month" vs "Day of Week".
+- **Syntax Errors**: Fixed `pd.Timestamp` mixed argument errors.
+- **Legacy Code**: Removed redundant code blocks in `app.py`.
 
-### Changed
-- **Dependencies**: None.
-- **Configuration**: User now needs to set `OPENAI_API_KEY` in Supabase secrets.
+## [V3.1]
+### Added
+- **Persistent Login**: Added "Remember Me" functionality using local `.session_cache`.
+- **Manual Refresh**: Added sidebar refresh button.
+- **UI Improvements**: Added "Thinking..." animation and improved sort order.
+
+## [V3.0]
+### Added
+- **Monthly Budgets**: Budget management with visual progress bars.
+- **Recurring Expenses**: Automated cron-based expense recording.
+- **New UI**: Deep Blue theme and new dashboard layout.
