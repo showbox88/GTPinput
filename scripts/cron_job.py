@@ -59,6 +59,7 @@ def main():
                     .select("*") \
                     .eq("item", rule["name"]) \
                     .eq("category", rule["category"]) \
+                    .eq("user_id", rule["user_id"]) \
                     .gte("date", start_date) \
                     .lte("date", end_date) \
                     .execute()
