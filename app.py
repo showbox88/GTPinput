@@ -774,14 +774,84 @@ if main_nav == "⚙️ 设置":
                 add_budget(f"{b_cat}预算", b_cat, b_amt, "#FF4B4B", "💰")
                 st.rerun()
                 
-        # List budgets to delete
+        # List budgets to delete/edit
         cur_budgets = get_budgets()
         if cur_budgets:
-            for b in cur_budgets:
-                c1, c2 = st.columns([4,1])
-                c1.text(f"{b['category']}: ${b['amount']}")
-                if c2.button("删除", key=f"del_b_{b['id']}"):
-                    delete_budget(b['id'])
+            df_budgets = pd.DataFrame(cur_budgets)
+            # Ensure proper types
+            if "amount" in df_budgets.columns:
+                df_budgets["amount"] = pd.to_numeric(df_budgets["amount"], errors="coerce").fillna(0)
+            
+            # Configure editor
+            b_cfg = {
+                "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, required=True),
+                "amount": st.column_config.NumberColumn("限额", min_value=0, step=100),
+                "name": st.column_config.TextColumn("名称"),
+                "id": None, "user_id": None, "icon": None, "color": None, "created_at": None
+            }
+            
+            with st.form("budget_editor"):
+                # Use data_editor with num_rows="dynamic" to allow adding/deleting rows directly? 
+                # For now stick to strict editing existing, and keep the Add form separate for clarity unless merged.
+                # Merging "Add" into the table is cleaner but requires handling new rows in backend.
+                # Let's keep Add separate for now to avoid complexity, just allow Edit/Delete here.
+                
+                edited_b = st.data_editor(
+                    df_budgets,
+                    column_config=b_cfg,
+                    use_container_width=True,
+                    hide_index=True,
+                    key="budget_editor",
+                    num_rows="dynamic" # Allow delete
+                )
+                submit_b = st.form_submit_button("💾 保存预算修改 (Save Changes)")
+            
+            if submit_b:
+                # 1. Handle Deletes
+                # Find missing IDs
+                current_ids = set(df_budgets["id"].tolist())
+                new_ids_in_editor = set() 
+                
+                # Rows in edited_b might include new rows without ID (if added via table)
+                # But if we only allow delete/edit existing:
+                for idx, row in edited_b.iterrows():
+                    if "id" in row and pd.notna(row["id"]):
+                        new_ids_in_editor.add(row["id"])
+                
+                # IDs present before but missing now -> Deleted
+                deleted_ids = current_ids - new_ids_in_editor
+                for d_id in deleted_ids:
+                    delete_budget(d_id)
+                
+                # 2. Handle Updates (and Adds if supported)
+                # Check for changes
+                # Since we wrapped in Form, 'edited_b' is the final state.
+                # We can iterate and upsert.
+                
+                changes_count = 0
+                for index, row in edited_b.iterrows():
+                    # If it has an ID, it's an update
+                    if "id" in row and pd.notna(row["id"]):
+                        # Check if different from original
+                        # Optimization: We could compare, or just upsert all for simplicity in this scale
+                        
+                        # Only update if fields changed - but simple upsert is fine for <50 items
+                        try:
+                            # Construct payload ensuring types
+                            payload = {
+                                "category": row["category"],
+                                "amount": float(row["amount"]),
+                                "name": row["name"]
+                            }
+                            supabase.table("budgets").update(payload).eq("id", row["id"]).execute()
+                            changes_count += 1
+                        except Exception as e:
+                            st.error(f"Error updating budget {row.get('name')}: {e}")
+                            
+                if changes_count > 0 or len(deleted_ids) > 0:
+                    st.success("预算设置已更新")
+                    time.sleep(1)
+                    st.cache_data.clear()
                     st.rerun()
         else:
             st.caption("暂无预算设置")
@@ -807,14 +877,64 @@ if main_nav == "⚙️ 设置":
         # List Rules
         rules = get_recurring_rules()
         if rules:
-            st.write("📋 已有订阅:")
-            for r in rules:
-                rc1, rc2, rc3 = st.columns([3, 2, 1])
-                rc1.text(f"{r['name']} ({r['category']})")
-                rc2.text(f"${r['amount']} / {r['frequency']}")
-                if rc3.button("删除", key=f"del_r_{r['id']}"):
-                    delete_recurring(r['id'])
-                    st.rerun()
+            st.write("📋 订阅管理 (Edit/Delete):")
+            df_rules = pd.DataFrame(rules)
+            
+             # Configure editor
+            r_cfg = {
+                "name": st.column_config.TextColumn("名称", required=True),
+                "amount": st.column_config.NumberColumn("金额", min_value=0.0, step=1.0, required=True),
+                "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, required=True),
+                "frequency": st.column_config.SelectboxColumn("周期", options=["Monthly", "Yearly"], required=True),
+                "day": st.column_config.NumberColumn("扣款日", min_value=1, max_value=31),
+                "id": None, "user_id": None, "active": None, "created_at": None, "last_triggered": None
+            }
+            
+            with st.form("rule_editor"):
+                edited_r = st.data_editor(
+                    df_rules,
+                    column_config=r_cfg,
+                    use_container_width=True,
+                    hide_index=True,
+                    key="rule_editor",
+                    num_rows="dynamic"
+                )
+                submit_r = st.form_submit_button("💾 保存订阅修改 (Save Changes)")
+                
+            if submit_r:
+                # 1. Deletes
+                cur_r_ids = set(df_rules["id"].tolist())
+                new_r_ids = set()
+                for idx, row in edited_r.iterrows():
+                    if "id" in row and pd.notna(row["id"]):
+                        new_r_ids.add(row["id"])
+                
+                del_r_ids = cur_r_ids - new_r_ids
+                for d_id in del_r_ids:
+                    delete_recurring(d_id)
+                
+                # 2. Updates
+                r_changes = 0
+                for index, row in edited_r.iterrows():
+                    if "id" in row and pd.notna(row["id"]):
+                         try:
+                            payload = {
+                                "name": row["name"],
+                                "amount": float(row["amount"]),
+                                "category": row["category"],
+                                "frequency": row["frequency"],
+                                "day": int(row["day"])
+                            }
+                            supabase.table("recurring_rules").update(payload).eq("id", row["id"]).execute()
+                            r_changes += 1
+                         except Exception as e:
+                            st.error(f"Error updating rule {row.get('name')}: {e}")
+                
+                if r_changes > 0 or len(del_r_ids) > 0:
+                     st.success("订阅规则已更新")
+                     time.sleep(1)
+                     st.rerun()
+
         else:
             st.caption("暂无固定支出")
 
