@@ -293,8 +293,10 @@ def check_and_process_recurring():
                 # Note: This is an approximation. Ideally we have a linkage table. 
                 # But for personal app, matching Name + Category + Amount + Month is sufficient.
                 
+                # Calculate accurate end of month to avoid DB errors (e.g. Feb 31 is invalid)
                 start_date = f"{current_month_str}-01"
-                end_date = f"{current_month_str}-31" # Loose end date
+                last_day = pd.Timestamp(today.year, today.month, 1) + pd.offsets.MonthEnd(0)
+                end_date = last_day.strftime("%Y-%m-%d")
                 
                 res = supabase.table("expenses") \
                     .select("*") \

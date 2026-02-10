@@ -50,7 +50,9 @@ def main():
         if current_day >= rule_day:
             # Check if already paid
             start_date = f"{current_month_str}-01"
-            end_date = f"{current_month_str}-31"
+            # Calculate accurate end of month
+            last_day = pd.Timestamp(today.year, today.month, 1) + pd.offsets.MonthEnd(0)
+            end_date = last_day.strftime("%Y-%m-%d")
             
             try:
                 res = supabase.table("expenses") \
