@@ -79,7 +79,7 @@ def main():
                         "item": rule["name"],
                         "amount": float(rule["amount"]),
                         "category": rule["category"],
-                        "note": "自动通过订阅规则生成 (GitHub Action)",
+                        "note": "🔄 自动订阅 (每日检查)",
                         "source": "github_action",
                         "user_id": rule["user_id"] # Use the user_id from the rule
                     }

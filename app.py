@@ -329,7 +329,7 @@ def check_and_process_recurring():
                         "item": rule["name"],
                         "amount": float(rule["amount"]),
                         "category": rule["category"],
-                        "note": "自动通过订阅规则生成 (Auto-Recurring)",
+                        "note": "🔄 自动订阅 (App触发)",
                         "source": "recurring_rule",
                         "user_id": st.session_state["user"].id
                     }
@@ -594,7 +594,7 @@ if main_nav == "💬 智能输入":
                                 "item": r.get("item"),
                                 "amount": float(r.get("amount", 0)),
                                 "category": r.get("category", "其他"),
-                                "note": r.get("note", ""),
+                                "note": f"💬 {r.get('note')}" if r.get("note") else "💬 智能助手记录",
                                 "source": "chat_ui",
                                 "user_id": st.session_state["user"].id
                             })

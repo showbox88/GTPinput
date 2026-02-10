@@ -149,7 +149,7 @@ serve(async (req) => {
                 item: r.item,
                 amount: r.amount,
                 category: r.category || "其他",
-                note: r.note || null,
+                note: r.note ? `🤖 ${r.note}` : "🤖 定制GPT记录",
                 source: source,
                 user_id: ownerId // Explicitly set user_id
             }));
