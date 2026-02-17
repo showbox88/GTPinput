@@ -3,6 +3,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
+import datetime
 import modules.services as services
 
 # Optional imports
@@ -22,72 +23,81 @@ def inject_custom_css():
         /* Global Font & Background */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
         
+        .stApp {
+            background-color: #000000;
+        }
+
         div.block-container {
-            padding-top: 4rem;
+            padding-top: 6rem;
+            padding-bottom: 2rem;
         }
 
-        /* KPI Button Styling */
-        div.stButton > button {
-            width: 100%;
-            border-radius: 12px;
-            height: auto;
-            padding: 15px;
-            text-align: left;
+        /* Card Container */
+        .card-container {
+            background-color: #121212;
+            border: 1px solid #2A2A2A;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        /* KPI Visual Card */
+        .kpi-card-visual {
+            border-radius: 16px;
+            padding: 20px;
+            color: white;
+            position: relative;
+            overflow: hidden;
             border: 1px solid rgba(255,255,255,0.1);
-            background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
-            transition: transform 0.2s, border-color 0.2s;
-        }
-        div.stButton > button:hover {
-            transform: translateY(-2px);
-            border-color: rgba(255,255,255,0.3);
-            background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%);
-        }
-        div.stButton > button p {
-            font-size: 1.1rem;
-        }
-
-        /* Sidebar Navigation */
-        section[data-testid="stSidebar"] {
-            background-color: #0E1117;
-            border-right: 1px solid rgba(255,255,255,0.05);
-        }
-
-        /* Custom Tabs/Nav */
-        .nav-btn {
+            height: 140px;
             display: flex;
-            align-items: center;
-            padding: 12px 16px;
-            margin-bottom: 4px;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: background 0.2s;
-            color: #E0E0E0;
-            text-decoration: none;
-            border: none;
-            background: transparent;
-            width: 100%;
-            text-align: left;
+            flex-direction: column;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
-        .nav-btn:hover {
-            background: rgba(255,255,255,0.05);
-        }
-        .nav-btn.active {
-            background: rgba(46, 134, 193, 0.2);
-            color: #56CCF2;
-            font-weight: 600;
-            border-left: 3px solid #56CCF2;
-        }
+        .kpi-card-visual .kpi-title { font-size: 1.15rem; opacity: 0.9; font-weight: 600; margin-bottom: 4px; }
+        .kpi-card-visual .kpi-value { font-size: 1.8rem; font-weight: 800; margin: 4px 0; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
+        .kpi-card-visual .kpi-meta { font-size: 0.8rem; opacity: 0.6; margin-top: 4px; }
         
-        /* Chat Styling */
-        .chat-container {
-            border: 1px solid rgba(255,255,255,0.1);
-            border-radius: 12px;
-            background-color: rgba(14, 17, 23, 0.5);
+        .kpi-blue { background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); }
+        .kpi-purple { background: linear-gradient(135deg, #23074d 0%, #cc5333 100%); } 
+        .kpi-dark { background: linear-gradient(to right, #232526, #414345); }
+
+        /* Reverse Ghost Button Strategy */
+        div[data-testid="column"]:has(#kpi-card-1) button,
+        div[data-testid="column"]:has(#kpi-card-2) button,
+        div[data-testid="column"]:has(#kpi-card-3) button {
+            height: 140px !important;
+            opacity: 0 !important;
+            z-index: 1;
+            width: 100% !important;
         }
-        
-        /* Table / Dataframes */
-        thead tr th:first-child { display:none }
-        tbody th { display:none }
+
+        #kpi-card-1, #kpi-card-2, #kpi-card-3 {
+            margin-top: -140px !important; 
+            pointer-events: none; 
+            position: relative;
+            z-index: 5;
+        }
+
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background-color: #000000;
+            border-right: 1px solid #2A2A2A;
+        }
+
+        /* Heatmap Grid */
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(10px, 1fr));
+            gap: 4px;
+            margin-top: 10px;
+        }
+        .heatmap-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 3px;
+        }
         
     </style>
     """, unsafe_allow_html=True)
@@ -162,6 +172,10 @@ def render_sidebar_nav():
         div[data-testid="stRadio"] div[role="radiogroup"] > label p {
             font-size: 1.1rem !important;
         }
+        /* Hide the radio circle */
+        div[data-testid="stRadio"] div[role="radiogroup"] > label > div:first-child {
+            display: none !important;
+        }
     </style>
     """, unsafe_allow_html=True)
     
@@ -207,8 +221,63 @@ def navigate_to(page_key):
     else:
         st.session_state["v2_nav_radio"] = None
 
+def render_budget_cards(df, services, supabase):
+    budgets = services.get_budgets(supabase)
+    this_month = pd.Timestamp.today().strftime("%Y-%m")
+    
+    if budgets:
+        # Prepare data
+        df_budget_calc = df.copy()
+        if "月(yyyy-mm)" in df_budget_calc.columns:
+            df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == this_month]
+        
+        # Grid layout
+        cols = st.columns(2) 
+        icon_map = {
+            "餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", 
+            "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"
+        }
+
+        for i, b in enumerate(budgets):
+            with cols[i % 2]:
+                spent = df_budget_calc[df_budget_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_budget_calc.columns else 0
+                limit = b["amount"]
+                
+                pct = spent / limit if limit > 0 else 0
+                pct_clamped = min(pct, 1.0) * 100
+                
+                # Colors
+                if pct > 1.0: 
+                    bar_color = "linear-gradient(90deg, #FF416C, #FF4B2B)" # Red Gradient
+                    text_color = "#FF416C"
+                elif pct > 0.8: 
+                    bar_color = "linear-gradient(90deg, #F2994A, #F2C94C)" # Orange Gradient
+                    text_color = "#F2994A"
+                else: 
+                    bar_color = "linear-gradient(90deg, #2F80ED, #56CCF2)" # Blue Gradient
+                    text_color = "#56CCF2"
+                
+                icon = icon_map.get(b["category"], "💰")
+                
+                st.markdown(f"""
+<div style="margin-bottom: 12px; padding: 12px; background: #121212; border-radius: 16px; border: 1px solid #2A2A2A;">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+<div style="display:flex; align-items:center; gap:8px;">
+<span style="font-size:1.2rem;">{icon}</span>
+<span style="font-weight:600; color:#eee; font-size:1rem;">{b['category']}</span>
+</div>
+<span style="font-size:0.85rem; color:{text_color}; font-weight:600;">${spent:,.0f} <span style="color:#666; font-weight:400;">/ ${limit:,.0f}</span></span>
+</div>
+<div style="width:100%; background:#262626; border-radius:16px; height:32px; overflow:hidden;">
+<div style="width:{pct_clamped}%; background:{bar_color}; height:100%; border-radius:16px; transition: width 0.5s;"></div>
+</div>
+</div>
+""", unsafe_allow_html=True)
+    else:
+        st.info("暂无预算配置 (No Budgets Set)")
+
 def render_top_navigation(df, services, supabase):
-    # KPIs
+    # KPIs Calculation
     this_month = pd.Timestamp.today().strftime("%Y-%m")
     
     if "月(yyyy-mm)" in df.columns:
@@ -219,98 +288,204 @@ def render_top_navigation(df, services, supabase):
         month_total = 0
         count = 0
         
-    # Budget Logic
     budgets = services.get_budgets(supabase)
     budget_total = sum([b["amount"] for b in budgets])
     left = budget_total - month_total
     
-    # Recurring
     subs = services.get_recurring_rules(supabase)
     active_subs = len(subs)
 
+    # Render Clickable KPI Cards with Ghost Button Strategy
     c1, c2, c3 = st.columns(3)
     
-    # KPI 1: Expenses -> To Transactions
-    with c1:
-        st.button(
-            f"📅 本月支出 (Expense)\n\n# ${month_total:,.2f}\n\n{count} 笔交易", 
-            use_container_width=True,
-            help="点击查看详细记录",
-            on_click=navigate_to,
-            args=("Transactions",)
-        )
-
-    # KPI 2: Budget -> To Analysis
-    with c2:
-        color_ind = "✅" if left >= 0 else "⚠️"
-        st.button(
-            f"💰 剩余预算 (Budget)\n\n# ${left:,.2f}\n\n{color_ind} 总额: ${budget_total:,.0f}", 
-            use_container_width=True,
-            help="点击查看分析",
-            on_click=navigate_to,
-            args=("Analysis",)
-        )
-
-    # KPI 3: Subs -> To Subscriptions
-    with c3:
-        st.button(
-            f"🔄 活跃订阅 (Subs)\n\n# {active_subs}\n\n固定支出项目", 
-            use_container_width=True,
-            help="点击管理订阅",
-            on_click=navigate_to,
-            args=("Subscriptions",)
-        )
+    # Render Clickable KPI Cards with Ghost Button Strategy (Reverse: Button First, Overlay Second)
+    c1, c2, c3 = st.columns(3)
     
-    st.write("")
+    with c1:
+        st.button(" ", key="btn_trans_ghost", use_container_width=True, on_click=navigate_to, args=("Transactions",))
+        st.markdown(f"""
+        <div id="kpi-card-1" class="kpi-card-visual kpi-blue">
+            <div class="kpi-title">📅 本月支出 (Month)</div>
+            <div class="kpi-value">${month_total:,.2f}</div>
+            <div class="kpi-meta">{count} 笔交易</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.button(" ", key="btn_analysis_ghost", use_container_width=True, on_click=navigate_to, args=("Analysis",))
+        st.markdown(f"""
+        <div id="kpi-card-2" class="kpi-card-visual kpi-purple">
+            <div class="kpi-title">💰 剩余预算 (Left)</div>
+            <div class="kpi-value">${left:,.2f}</div>
+            <div class="kpi-meta">总额: ${budget_total:,.0f}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c3:
+        st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
+        st.markdown(f"""
+        <div id="kpi-card-3" class="kpi-card-visual kpi-dark">
+            <div class="kpi-title">🔄 活跃订阅 (Subs)</div>
+            <div class="kpi-value">{active_subs}</div>
+            <div class="kpi-meta">固定支出项目</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+def render_heatmap(supabase):
+    data = services.get_daily_activity(supabase, days=180) 
+    if not data: return
+    
+    # 26 weeks * 7 days = 182 days (Fill more width)
+    today = datetime.date.today()
+    days_to_show = 182
+    start_date = today - datetime.timedelta(days=days_to_show - 1)
+    
+    cells = []
+    months = []
+    last_month = ""
+    
+    for i in range(days_to_show):
+        d = start_date + datetime.timedelta(days=i)
+        d_str = d.strftime("%Y-%m-%d")
+        count = data.get(d_str, 0)
+        
+        # Color scale
+        if count == 0: color = "#2d333b"
+        elif count <= 2: color = "#0e4429"
+        elif count <= 5: color = "#006d32"
+        elif count <= 10: color = "#26a641"
+        else: color = "#39d353"
+        
+        cells.append(f'<div class="heatmap-cell" style="background-color:{color};" title="{d_str}: {count}"></div>')
+        
+        # Track months for labels
+        m = d.strftime("%b")
+        if m != last_month:
+            months.append(m)
+            last_month = m
+            
+    # Labels
+    labels_html = "".join([f"<span>{m}</span>" for m in months])
+
+    grid_html = f"""
+    <style>
+        .heatmap-container {{
+            background:#121212; padding:24px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:15px;
+            overflow-x: auto;
+        }}
+        .heatmap-inner-wrapper {{
+            width: max-content; /* Shrink fit to grid content */
+        }}
+        .heatmap-grid {{
+            display: grid;
+            grid-template-rows: repeat(7, 30px); 
+            grid-auto-flow: column;
+            gap: 5px;
+            margin-bottom: 8px;
+        }}
+        .heatmap-cell {{
+            width: 30px;
+            height: 30px;
+            border-radius: 6px;
+        }}
+        .heatmap-labels {{
+            display: flex;
+            justify-content: space-between;
+            color: #888;
+            font-size: 0.9rem;
+            padding: 0 4px;
+            font-weight: 500;
+        }}
+    </style>
+    <div class="heatmap-container">
+        <div style="font-size:1.15rem; opacity:0.9; font-weight:600; color:#eee; margin-bottom:15px;">活跃分布 (Activity)</div>
+        <div class="heatmap-inner-wrapper">
+            <div class="heatmap-grid">
+                {''.join(cells)}
+            </div>
+            <div class="heatmap-labels">
+                {labels_html}
+            </div>
+        </div>
+    </div>
+    """
+    st.markdown(grid_html, unsafe_allow_html=True)
 
 def render_dashboard(df, services, supabase):
     render_top_navigation(df, services, supabase)
-    st.header("总览")
+    
+    # Heatmap
+    render_heatmap(supabase)
     
     this_month = pd.Timestamp.today().strftime("%Y-%m")
     
     # Charts Area
-    col_chart, col_list = st.columns([2, 1])
-    
-    with col_chart:
-        with st.container(border=True):
-            st.subheader("📊 支出趋势")
-            if "月(yyyy-mm)" in df.columns:
-                daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
-                if not daily_trend.empty:
-                    fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
-                    fig.update_layout(
-                        paper_bgcolor="rgba(0,0,0,0)", 
-                        plot_bgcolor="rgba(0,0,0,0)", 
-                        margin=dict(l=0, r=0, t=10, b=0),
-                        xaxis=dict(showgrid=False),
-                        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.1)")
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("本月暂无数据")
-            else:
-                st.info("无数据")
+    st.markdown("### 📊 支出趋势")
+    if "月(yyyy-mm)" in df.columns:
+        daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
+        if not daily_trend.empty:
+            fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", 
+                plot_bgcolor="rgba(0,0,0,0)", 
+                margin=dict(l=0, r=0, t=10, b=0),
+                xaxis=dict(showgrid=False, tickfont=dict(color="#888")),
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
+                height=250
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("本月暂无数据")
 
-    with col_list:
-        with st.container(border=True):
-            st.subheader("🕒 最近记录")
-            if not df.empty:
-                # Simplified list
-                recent = df.head(5)[["项目", "金额", "日期"]]
-                for i, row in recent.iterrows():
-                    d = pd.to_datetime(row["日期"]).strftime("%m-%d")
-                    st.markdown(f"""
-                    <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);">
-                        <div>
-                            <span style="color:#eee; font-weight:500;">{row['项目']}</span><br>
-                            <span style="color:#888; font-size:12px;">{d}</span>
-                        </div>
-                        <div style="color:#56CCF2; font-weight:600;">${row['金额']:,.0f}</div>
+    # Recent Records (Grouped)
+    st.markdown("### 🕒 最近记录")
+    
+    if not df.empty:
+        # Sort and Group
+        df_sorted = df.sort_values(by=["date", "id"], ascending=[False, False]).head(20)
+        today_str = datetime.date.today().strftime("%Y-%m-%d")
+        yesterday_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        current_group = None
+        
+        for _, row in df_sorted.iterrows():
+            d_str = pd.to_datetime(row["日期"]).strftime("%Y-%m-%d")
+            
+            # Determine Group Header
+            if d_str == today_str: group_name = "Today"
+            elif d_str == yesterday_str: group_name = "Yesterday"
+            else: group_name = pd.to_datetime(d_str).strftime("%A, %B %d")
+            
+            if group_name != current_group:
+                st.markdown(f'<div style="color:#888; font-size:0.85rem; margin-top:15px; margin-bottom:5px;">{group_name}</div>', unsafe_allow_html=True)
+                current_group = group_name
+            
+            # Icon mapping
+            cat = row["分类"]
+            icon_map = {
+                "餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", 
+                "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"
+            }
+            icon = icon_map.get(cat, "💰")
+            
+            # Render Row
+            st.markdown(f"""
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#121212; border-radius:12px; margin-bottom:8px; border:1px solid #2A2A2A;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="width:40px; height:40px; border-radius:50%; background:#1E1E1E; display:flex; align-items:center; justify-content:center; font-size:1.2rem;">
+                        {icon}
                     </div>
-                    """, unsafe_allow_html=True)
-            else:
-                st.caption("无最近记录")
+                    <div>
+                        <div style="color:#eee; font-weight:500;">{row['项目']}</div>
+                        <div style="color:#666; font-size:0.8rem;">{cat} • {row.get('备注','')}</div>
+                    </div>
+                </div>
+                <div style="color:#FF4B4B; font-weight:600;">-${row['有效金额']:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    else:
+        st.caption("无最近记录")
                 
 def render_analysis(df, services, supabase):
     render_top_navigation(df, services, supabase)
@@ -318,62 +493,42 @@ def render_analysis(df, services, supabase):
     
     # === Budget Progress Section (Visuals & Link to Management) ===
     with st.container(border=True):
-        c_title, c_link = st.columns([3, 1])
+        c_title, c_link = st.columns([5, 1])
         with c_title:
             st.subheader("📊 预算详情 (Budget Breakdown)")
         with c_link:
             st.button(
-                "⚙️ 管理预算", 
+                "⚙️ 管理", 
                 key="goto_budget_manage", 
+                help="管理预算",
                 use_container_width=True,
                 on_click=navigate_to,
                 args=("Budgets",)
             )
         
-        budgets = services.get_budgets(supabase)
-        this_month = pd.Timestamp.today().strftime("%Y-%m")
-        
-        if budgets:
-            # Prepare data
-            df_budget_calc = df.copy()
-            if "月(yyyy-mm)" in df_budget_calc.columns:
-                df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == this_month]
-            
-            # Grid layout for budgets
-            cols = st.columns(2) 
-            for i, b in enumerate(budgets):
-                with cols[i % 2]:
-                    spent = df_budget_calc[df_budget_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_budget_calc.columns else 0
-                    limit = b["amount"]
-                    
-                    pct = spent / limit if limit > 0 else 0
-                    pct_clamped = min(pct, 1.0) * 100
-                    
-                    if pct > 1.0: color = "#FF416C" # Red
-                    elif pct > 0.8: color = "#F2994A" # Orange
-                    elif pct > 0.5: color = "#FFD700" # Yellow
-                    else: color = "#2F80ED" # Blue
-                    
-                    st.markdown(f"""
-                    <div style="margin-bottom: 15px; padding: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
-                            <span style="font-weight:600; color:#eee; font-size:1.1em;">{b['category']}</span>
-                            <span style="font-size:0.9em; color:{color};">${spent:,.0f} / ${limit:,.0f}</span>
-                        </div>
-                        <div style="width:100%; background:rgba(255,255,255,0.1); border-radius:8px; height:18px;">
-                            <div style="width:{pct_clamped}%; background:{color}; height:100%; border-radius:8px; transition: width 0.5s; box-shadow: 0 0 10px {color}66;"></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("暂无预算配置 (No Budgets Set)")
+        render_budget_cards(df, services, supabase)
     
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("分类占比 (Category)")
         if not df.empty and "分类" in df.columns:
-             fig = px.pie(df, names="分类", values="有效金额", hole=0.6, color_discrete_sequence=px.colors.sequential.Blues_r)
-             fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=20, b=20, l=20, r=20), showlegend=True)
+             # Prepare Data with Icons
+             icon_map = {
+                "餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", 
+                "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"
+             }
+             
+             df_pie = df.copy()
+             df_pie["IconLabel"] = df_pie["分类"].apply(lambda x: f"{icon_map.get(x, '💰')} {x}")
+             
+             fig = px.pie(df_pie, names="IconLabel", values="有效金额", hole=0.6, 
+                 color_discrete_sequence=["#2F80ED", "#56CCF2", "#6FCF97", "#F2C94C", "#BB6BD9", "#EB5757", "#9B51E0", "#2D9CDB"])
+             fig.update_traces(textinfo='percent+label', textposition='inside', textfont_color="white")
+             fig.update_layout(
+                 paper_bgcolor="rgba(0,0,0,0)", 
+                 margin=dict(t=20, b=20, l=20, r=20), 
+                 showlegend=False
+             )
              st.plotly_chart(fig, use_container_width=True)
              
     with c2:
@@ -381,11 +536,12 @@ def render_analysis(df, services, supabase):
         if not df.empty and "月(yyyy-mm)" in df.columns:
             monthly = df.groupby("月(yyyy-mm)")["有效金额"].sum().reset_index()
             fig = px.bar(monthly, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
-            fig.update_traces(marker_color='#2F80ED', marker_line_width=0)
+            fig.update_traces(marker_color='#2F80ED', marker_line_width=0, textfont_color="#fff")
             fig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(gridcolor="rgba(255,255,255,0.1)")
+                yaxis=dict(gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
+                xaxis=dict(tickfont=dict(color="#888"))
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -632,33 +788,10 @@ def render_budgets(df, services, supabase, user):
                 df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == this_month]
             
             # Grid layout for budgets
-            cols = st.columns(2) 
-            for i, b in enumerate(budgets):
-                with cols[i % 2]:
-                    spent = df_budget_calc[df_budget_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_budget_calc.columns else 0
-                    limit = b["amount"]
-                    
-                    pct = spent / limit if limit > 0 else 0
-                    pct_clamped = min(pct, 1.0) * 100
-                    
-                    if pct > 1.0: color = "#FF416C" # Red
-                    elif pct > 0.8: color = "#F2994A" # Orange
-                    elif pct > 0.5: color = "#FFD700" # Yellow
-                    else: color = "#2F80ED" # Blue
-                    
-                    st.markdown(f"""
-                    <div style="margin-bottom: 15px; padding: 15px; background: rgba(255,255,255,0.03); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
-                        <div style="display:flex; justify-content:space-between; margin-bottom:8px; align-items:center;">
-                            <span style="font-weight:600; color:#eee; font-size:1.1em;">{b['category']}</span>
-                            <span style="font-size:0.9em; color:{color};">${spent:,.0f} / ${limit:,.0f}</span>
-                        </div>
-                        <div style="width:100%; background:rgba(255,255,255,0.1); border-radius:8px; height:18px;">
-                            <div style="width:{pct_clamped}%; background:{color}; height:100%; border-radius:8px; transition: width 0.5s; box-shadow: 0 0 10px {color}66;"></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-        else:
-            st.info("暂无预算配置 (No Budgets Set)")
+    # === 1. Budget Breakdown (Visuals) ===
+    with st.container(border=True):
+        st.subheader("📊 预算详情 (Budget Breakdown)")
+        render_budget_cards(df, services, supabase)
     
     st.divider()
 

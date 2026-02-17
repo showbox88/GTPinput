@@ -59,7 +59,34 @@ def load_expenses(supabase, limit=500):
         print(f"数据加载失败: {e}")
         return pd.DataFrame()
 
-def add_expense(supabase, user_id, date, item, amount, category, note="", source="manual"):
+def get_daily_activity(supabase, days=180):
+    """
+    Get daily transaction counts for heatmap.
+    """
+    try:
+        end_date = datetime.date.today()
+        start_date = end_date - datetime.timedelta(days=days)
+        
+        response = supabase.table("expenses") \
+            .select("date") \
+            .gte("date", start_date.strftime("%Y-%m-%d")) \
+            .lte("date", end_date.strftime("%Y-%m-%d")) \
+            .execute()
+            
+        if not response.data:
+            return {}
+            
+        # Count occurrences
+        counts = {}
+        for row in response.data:
+            d = row["date"]
+            counts[d] = counts.get(d, 0) + 1
+            
+        return counts
+    except Exception as e:
+        print(f"Error fetching activity: {e}")
+        return {}
+
     """
     Adds a single expense record.
     """
