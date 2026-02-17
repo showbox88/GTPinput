@@ -172,29 +172,40 @@ def render_sidebar_nav():
     if "v2_page" not in st.session_state:
         st.session_state["v2_page"] = "Dashboard"
         
-    current_val = NAV_OPTIONS.get(st.session_state["v2_page"], NAV_OPTIONS["Dashboard"])
+    # Determine current index
+    current_page = st.session_state["v2_page"]
+    current_label = NAV_OPTIONS.get(current_page)
     
-    selected_val = st.radio(
+    idx = None
+    if current_label:
+        try:
+            idx = list(NAV_OPTIONS.values()).index(current_label)
+        except ValueError:
+            idx = None
+
+    def on_nav_change():
+        sel = st.session_state["v2_nav_radio"]
+        if sel in rev_options:
+            st.session_state["v2_page"] = rev_options[sel]
+    
+    st.radio(
         "Menu",
         list(NAV_OPTIONS.values()),
-        index=list(NAV_OPTIONS.values()).index(current_val),
+        index=idx,
         label_visibility="collapsed",
-        key="v2_nav_radio"
+        key="v2_nav_radio",
+        on_change=on_nav_change
     )
     
-    # Update state if changed
-    new_page = rev_options.get(selected_val)
-    if new_page != st.session_state["v2_page"]:
-        st.session_state["v2_page"] = new_page
-        st.rerun()
-        
     return st.session_state["v2_page"]
 
 def navigate_to(page_key):
     st.session_state["v2_page"] = page_key
-    # Sync radio button if it exists and is valid
-    if "v2_nav_radio" in st.session_state and page_key in NAV_OPTIONS:
+    # Sync radio button
+    if page_key in NAV_OPTIONS:
         st.session_state["v2_nav_radio"] = NAV_OPTIONS[page_key]
+    else:
+        st.session_state["v2_nav_radio"] = None
 
 def render_top_navigation(df, services, supabase):
     # KPIs
