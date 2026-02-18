@@ -400,17 +400,17 @@ def render_budget_cards(df, services, supabase):
                     }}
                     .track-container {{
                         position: relative;
-                        height: 40px; /* Increased space */
+                        height: 48px; /* More space for marker */
                         margin-bottom: 8px;
-                        display: flex; align-items: center;
+                        /* Removed flex to rely on absolute positioning */
                     }}
                     .track-bg {{
-                        position: absolute; left: 0; right: 0;
-                        height: 12px; background: #333; border-radius: 6px; /* Thicker track */
+                        position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+                        height: 12px; background: #333; border-radius: 6px; 
                     }}
                     .track-fill {{
-                        position: absolute; left: 0;
-                        height: 12px; border-radius: 6px; /* Thicker fill */
+                        position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+                        height: 12px; border-radius: 6px; 
                         width: {pct_clamped}%;
                         background: {bar_color};
                         box-shadow: 0 0 10px rgba(0,0,0,0.3);
@@ -418,11 +418,12 @@ def render_budget_cards(df, services, supabase):
                         z-index: 1;
                     }}
                     .marker-today {{
-                        position: absolute; top: -4px; left: {time_pct}%;
+                        position: absolute; top: 0; left: {time_pct}%;
                         transform: translateX(-50%);
                         display: flex; flex-direction: column; align-items: center;
                         z-index: 2;
                         height: 100%;
+                        pointer-events: none;
                     }}
                     .marker-bubble {{
                         background: #fff; color: #000;
@@ -433,7 +434,9 @@ def render_budget_cards(df, services, supabase):
                         line-height: 1;
                     }}
                     .marker-line {{
-                        width: 2px; flex-grow: 1; background: #fff; opacity: 0.8;
+                        width: 2px; background: #fff; opacity: 0.8;
+                        flex-grow: 1; /* Stretch to bottom */
+                        margin-bottom: 50%; /* Stop roughly at center of track */
                     }}
                     
                     .bc-advice {{
