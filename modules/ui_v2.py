@@ -346,21 +346,17 @@ def render_budget_cards(df, services, supabase):
                 else: # Last day
                     advice_text = f"最后一天，剩余预算 ${left:.0f}"
 
-                # Health & Gradient Determination
+                # Health & Color Determination
                 # Logic: Compare Spending Pct vs Time Pct
-                # If Spending > Time + 10% -> Red (Danger)
-                # If Spending > Time -> Orange (Warning)
-                # Else -> Blue/Teal (Healthy)
-                
                 if pct > 1.0:
-                    grad_class = "grad-red" # Over limit
-                    text_color = "#ffcccc"
+                    bar_color = "linear-gradient(90deg, #FF416C, #FF4B2B)" # Red
+                    text_color = "#FF4B4B"
                 elif pct * 100 > time_pct + 10:
-                    grad_class = "grad-orange" # Spending faster than time
-                    text_color = "#ffeebb"
+                    bar_color = "linear-gradient(90deg, #F2994A, #F2C94C)" # Orange
+                    text_color = "#F2C94C"
                 else:
-                    grad_class = "grad-teal" # Healthy
-                    text_color = "#d1f7ff"
+                    bar_color = "linear-gradient(90deg, #2F80ED, #56CCF2)" # Blue/Cyan
+                    text_color = "#56CCF2"
                 
                 icon = icon_map.get(b["category"], "💰")
                 
@@ -374,18 +370,16 @@ def render_budget_cards(df, services, supabase):
                         font-family: 'Inter', sans-serif;
                     }}
                     .bc-top {{
+                        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); /* Professional Dark Blue Fixed */
                         padding: 24px;
                         color: white;
                         position: relative;
                     }}
-                    .grad-teal {{ background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }}
-                    .grad-orange {{ background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }}
-                    .grad-red {{ background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%); }}
                     
                     .bc-cat-row {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }}
                     .bc-cat-name {{ font-size: 1.4rem; font-weight: 700; opacity: 0.95; }}
                     .bc-icon-box {{ 
-                        background: rgba(255,255,255,0.2); 
+                        background: rgba(255,255,255,0.15); 
                         width: 40px; height: 40px; border-radius: 12px; 
                         display: flex; align-items: center; justify-content: center; 
                         backdrop-filter: blur(4px);
@@ -406,43 +400,49 @@ def render_budget_cards(df, services, supabase):
                     }}
                     .track-container {{
                         position: relative;
-                        height: 36px; /* Space for marker */
+                        height: 40px; /* Increased space */
                         margin-bottom: 8px;
+                        display: flex; align-items: center;
                     }}
                     .track-bg {{
-                        position: absolute; top: 18px; left: 0; right: 0;
-                        height: 6px; background: #333; border-radius: 3px;
+                        position: absolute; left: 0; right: 0;
+                        height: 12px; background: #333; border-radius: 6px; /* Thicker track */
                     }}
                     .track-fill {{
-                        position: absolute; top: 18px; left: 0;
-                        height: 6px; background: rgba(255,255,255,0.9); border-radius: 3px;
+                        position: absolute; left: 0;
+                        height: 12px; border-radius: 6px; /* Thicker fill */
                         width: {pct_clamped}%;
-                        box-shadow: 0 0 8px rgba(255,255,255,0.5);
+                        background: {bar_color};
+                        box-shadow: 0 0 10px rgba(0,0,0,0.3);
                         transition: width 0.5s ease;
+                        z-index: 1;
                     }}
                     .marker-today {{
-                        position: absolute; top: 0; left: {time_pct}%;
+                        position: absolute; top: -4px; left: {time_pct}%;
                         transform: translateX(-50%);
                         display: flex; flex-direction: column; align-items: center;
+                        z-index: 2;
+                        height: 100%;
                     }}
                     .marker-bubble {{
                         background: #fff; color: #000;
                         padding: 2px 6px; border-radius: 6px;
-                        font-size: 0.7rem; font-weight: 700;
-                        margin-bottom: 4px;
+                        font-size: 0.65rem; font-weight: 800;
+                        margin-bottom: 2px;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                        line-height: 1;
                     }}
                     .marker-line {{
-                        width: 2px; height: 16px; background: #fff; opacity: 0.5;
+                        width: 2px; flex-grow: 1; background: #fff; opacity: 0.8;
                     }}
                     
                     .bc-advice {{
-                        text-align: center; color: #888; font-size: 0.8rem; margin-top: 8px;
+                        text-align: center; color: #888; font-size: 0.8rem; margin-top: 12px;
                     }}
                 </style>
                 
                 <div class="budget-card-container">
-                    <div class="bc-top {grad_class}">
+                    <div class="bc-top">
                         <div class="bc-cat-row">
                             <div class="bc-cat-name">{b['category']}</div>
                             <div class="bc-icon-box" style="font-size: 1.2rem;">{icon}</div>
