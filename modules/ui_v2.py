@@ -400,13 +400,13 @@ def render_top_navigation(df, services, supabase):
         st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
 
 def render_heatmap(supabase):
-    # Load more data for denser view (364 days = 52 weeks)
-    data = services.get_daily_activity(supabase, days=365) 
+    # Load data for 3 months (~91 days)
+    data = services.get_daily_activity(supabase, days=100) 
     if not data: return
     
     tz = pytz.timezone("Asia/Shanghai")
     today = datetime.datetime.now(tz).date()
-    days_to_show = 364
+    days_to_show = 91 # 13 weeks * 7 = 91 days
     start_date = today - datetime.timedelta(days=days_to_show - 1)
     
     cells = []
@@ -414,6 +414,7 @@ def render_heatmap(supabase):
     last_month = ""
     
     for i in range(days_to_show):
+        # ... existing logic ...
         d = start_date + datetime.timedelta(days=i)
         d_str = d.strftime("%Y-%m-%d")
         count = data.get(d_str, 0)
@@ -440,7 +441,7 @@ def render_heatmap(supabase):
     <style>
         .heatmap-container {{
             background:#121212; padding:20px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:0;
-            height: 280px; /* Fixed height to match Trend Card */
+            height: 310px; /* Fixed height to match Trend Card Container */
             display: flex; flex-direction: column; justify-content: center;
         }}
         .heatmap-inner-wrapper {{
@@ -495,6 +496,9 @@ def render_desktop_dashboard(df, services, supabase):
         render_heatmap(supabase)
         
     with c_trend:
+        # Use a custom div to ensure exact height match if st.container is finicky
+        # But st.container(border=True) with a fixed height chart inside should work if we pad it.
+        # Plotly default margin might be adding up.
         with st.container(border=True):
             st.markdown('<div class="kpi-title" style="margin-bottom:15px;">📉 支出趋势 (Trend)</div>', unsafe_allow_html=True)
             
@@ -511,7 +515,7 @@ def render_desktop_dashboard(df, services, supabase):
                         margin=dict(l=0, r=0, t=0, b=0),
                         xaxis=dict(showgrid=False, tickfont=dict(color="#888")),
                         yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
-                        height=220 # Increased to match Heatmap container height (approx 280px total)
+                        height=240 # adjusted to fill the container to match ~310px total
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 else:
