@@ -302,13 +302,24 @@ def navigate_to(page_key):
 def render_budget_cards(df, services, supabase):
     budgets = services.get_budgets(supabase)
     tz = pytz.timezone("Asia/Shanghai")
-    this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
+    now = pd.Timestamp.now(tz=tz)
+    this_month_str = now.strftime("%Y-%m")
+    
+    # Date Calculations for Timeline
+    days_in_month = now.days_in_month
+    current_day = now.day
+    days_left = days_in_month - current_day
+    time_pct = (current_day / days_in_month) * 100
+    
+    # Start and End of month strings
+    start_str = now.replace(day=1).strftime("%b 1")
+    end_str = now.replace(day=days_in_month).strftime("%b %d")
     
     if budgets:
         # Prepare data
         df_budget_calc = df.copy()
         if "月(yyyy-mm)" in df_budget_calc.columns:
-            df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == this_month]
+            df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == this_month_str]
         
         # Grid layout
         cols = st.columns(2) 
@@ -321,37 +332,144 @@ def render_budget_cards(df, services, supabase):
             with cols[i % 2]:
                 spent = df_budget_calc[df_budget_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_budget_calc.columns else 0
                 limit = b["amount"]
+                left = limit - spent
                 
                 pct = spent / limit if limit > 0 else 0
                 pct_clamped = min(pct, 1.0) * 100
                 
-                # Colors
-                if pct > 1.0: 
-                    bar_color = "linear-gradient(90deg, #FF416C, #FF4B2B)" # Red Gradient
-                    text_color = "#FF416C"
-                elif pct > 0.8: 
-                    bar_color = "linear-gradient(90deg, #F2994A, #F2C94C)" # Orange Gradient
-                    text_color = "#F2994A"
-                else: 
-                    bar_color = "linear-gradient(90deg, #2F80ED, #56CCF2)" # Blue Gradient
-                    text_color = "#56CCF2"
+                # Daily Advice
+                if days_left > 0 and left > 0:
+                    daily_budget = left / days_left
+                    advice_text = f"建议每日消费 <span style='color:#fff; font-weight:600;'>${daily_budget:.0f}</span>，还剩 {days_left} 天"
+                elif left <= 0:
+                    advice_text = "⚠️ 预算已超支 (Over Budget)"
+                else: # Last day
+                    advice_text = f"最后一天，剩余预算 ${left:.0f}"
+
+                # Health & Gradient Determination
+                # Logic: Compare Spending Pct vs Time Pct
+                # If Spending > Time + 10% -> Red (Danger)
+                # If Spending > Time -> Orange (Warning)
+                # Else -> Blue/Teal (Healthy)
+                
+                if pct > 1.0:
+                    grad_class = "grad-red" # Over limit
+                    text_color = "#ffcccc"
+                elif pct * 100 > time_pct + 10:
+                    grad_class = "grad-orange" # Spending faster than time
+                    text_color = "#ffeebb"
+                else:
+                    grad_class = "grad-teal" # Healthy
+                    text_color = "#d1f7ff"
                 
                 icon = icon_map.get(b["category"], "💰")
                 
                 st.markdown(f"""
-<div style="margin-bottom: 12px; padding: 12px; background: #121212; border-radius: 16px; border: 1px solid #2A2A2A;">
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-<div style="display:flex; align-items:center; gap:8px;">
-<span style="font-size:1.2rem;">{icon}</span>
-<span style="font-weight:600; color:#eee; font-size:1rem;">{b['category']}</span>
-</div>
-<span style="font-size:0.85rem; color:{text_color}; font-weight:600;">${spent:,.0f} <span style="color:#666; font-weight:400;">/ ${limit:,.0f}</span></span>
-</div>
-<div style="width:100%; background:#262626; border-radius:16px; height:32px; overflow:hidden;">
-<div style="width:{pct_clamped}%; background:{bar_color}; height:100%; border-radius:16px; transition: width 0.5s;"></div>
-</div>
-</div>
-""", unsafe_allow_html=True)
+                <style>
+                    .budget-card-container {{
+                        border-radius: 24px;
+                        overflow: hidden;
+                        margin-bottom: 16px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                        font-family: 'Inter', sans-serif;
+                    }}
+                    .bc-top {{
+                        padding: 24px;
+                        color: white;
+                        position: relative;
+                    }}
+                    .grad-teal {{ background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }}
+                    .grad-orange {{ background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }}
+                    .grad-red {{ background: linear-gradient(135deg, #ff0844 0%, #ffb199 100%); }}
+                    
+                    .bc-cat-row {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }}
+                    .bc-cat-name {{ font-size: 1.4rem; font-weight: 700; opacity: 0.95; }}
+                    .bc-icon-box {{ 
+                        background: rgba(255,255,255,0.2); 
+                        width: 40px; height: 40px; border-radius: 12px; 
+                        display: flex; align-items: center; justify-content: center; 
+                        backdrop-filter: blur(4px);
+                    }}
+                    .bc-amount-big {{ font-size: 1.8rem; font-weight: 800; line-height: 1.1; }}
+                    .bc-amount-sub {{ font-size: 0.9rem; opacity: 0.8; font-weight: 500; }}
+                    
+                    .bc-bottom {{
+                        background: #181818;
+                        padding: 20px 24px;
+                        border-top: 1px solid rgba(255,255,255,0.05);
+                    }}
+                    .timeline-row {{
+                        display: flex; justify-content: space-between;
+                        color: #666; font-size: 0.75rem; font-weight: 600;
+                        align-items: center;
+                        margin-bottom: 12px;
+                    }}
+                    .track-container {{
+                        position: relative;
+                        height: 36px; /* Space for marker */
+                        margin-bottom: 8px;
+                    }}
+                    .track-bg {{
+                        position: absolute; top: 18px; left: 0; right: 0;
+                        height: 6px; background: #333; border-radius: 3px;
+                    }}
+                    .track-fill {{
+                        position: absolute; top: 18px; left: 0;
+                        height: 6px; background: rgba(255,255,255,0.9); border-radius: 3px;
+                        width: {pct_clamped}%;
+                        box-shadow: 0 0 8px rgba(255,255,255,0.5);
+                        transition: width 0.5s ease;
+                    }}
+                    .marker-today {{
+                        position: absolute; top: 0; left: {time_pct}%;
+                        transform: translateX(-50%);
+                        display: flex; flex-direction: column; align-items: center;
+                    }}
+                    .marker-bubble {{
+                        background: #fff; color: #000;
+                        padding: 2px 6px; border-radius: 6px;
+                        font-size: 0.7rem; font-weight: 700;
+                        margin-bottom: 4px;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    }}
+                    .marker-line {{
+                        width: 2px; height: 16px; background: #fff; opacity: 0.5;
+                    }}
+                    
+                    .bc-advice {{
+                        text-align: center; color: #888; font-size: 0.8rem; margin-top: 8px;
+                    }}
+                </style>
+                
+                <div class="budget-card-container">
+                    <div class="bc-top {grad_class}">
+                        <div class="bc-cat-row">
+                            <div class="bc-cat-name">{b['category']}</div>
+                            <div class="bc-icon-box" style="font-size: 1.2rem;">{icon}</div>
+                        </div>
+                        <div class="bc-amount-big">${left:,.0f}</div>
+                        <div class="bc-amount-sub">left of ${limit:,.0f}</div>
+                    </div>
+                    <div class="bc-bottom">
+                        <div class="timeline-row">
+                            <span>{start_str}</span>
+                            <span style="font-size: 1rem; color: #eee; font-weight: 700;">{int(pct_clamped)}%</span>
+                            <span>{end_str}</span>
+                        </div>
+                        <div class="track-container">
+                            <div class="track-bg"></div>
+                            <div class="track-fill"></div>
+                            <div class="marker-today">
+                                <div class="marker-bubble">Today</div>
+                                <div class="marker-line"></div>
+                            </div>
+                        </div>
+                        <div class="bc-advice">
+                            {advice_text}
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
     else:
         st.info("暂无预算配置 (No Budgets Set)")
 
