@@ -411,14 +411,14 @@ def render_budget_cards(df, services, supabase):
                     .track-fill {{
                         position: absolute; left: 0; top: 50%; transform: translateY(-50%);
                         height: 12px; border-radius: 6px; 
-                        width: {pct_clamped}%;
-                        background: {bar_color};
+                        /* width and background moved to inline style */
                         box-shadow: 0 0 10px rgba(0,0,0,0.3);
                         transition: width 0.5s ease;
                         z-index: 1;
                     }}
                     .marker-today {{
-                        position: absolute; top: 0; left: {time_pct}%;
+                        position: absolute; top: 0; 
+                        /* left moved to inline style */
                         transform: translateX(-50%);
                         display: flex; flex-direction: column; align-items: center;
                         z-index: 2;
@@ -461,8 +461,8 @@ def render_budget_cards(df, services, supabase):
                         </div>
                         <div class="track-container">
                             <div class="track-bg"></div>
-                            <div class="track-fill"></div>
-                            <div class="marker-today">
+                            <div class="track-fill" style="width: {pct_clamped}%; background: {bar_color};"></div>
+                            <div class="marker-today" style="left: {time_pct}%;">
                                 <div class="marker-bubble">Today</div>
                                 <div class="marker-line"></div>
                             </div>
