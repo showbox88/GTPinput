@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import datetime
 import pytz
 import modules.services as services
+import modules.utils as utils
 
 # Optional imports
 try:
@@ -230,7 +231,51 @@ def render_sidebar_nav():
     
     return st.session_state["v2_page"]
 
-def navigate_to(page_key):
+def render_mobile_bottom_nav():
+    st.markdown("""
+    <style>
+        .mobile-nav-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: #121212;
+            border-top: 1px solid #333;
+            z-index: 9999;
+            display: flex;
+            justify-content: space-around;
+            padding: 10px 0;
+            padding-bottom: max(10px, env(safe-area-inset-bottom));
+        }
+        .mobile-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #888;
+            font-size: 0.75rem;
+            text-decoration: none;
+            background: none;
+            border: none;
+            cursor: pointer;
+            width: 25%;
+        }
+        .mobile-nav-item.active {
+            color: #56CCF2;
+        }
+        .mobile-nav-icon {
+            font-size: 1.2rem;
+            margin-bottom: 2px;
+        }
+        /* Hide default Streamlit footer types if needed */
+    </style>
+    """, unsafe_allow_html=True)
+    
+    # Simple columnar layout at bottom for buttons
+    # Note: Streamlit buttons inside columns at bottom of flow
+    # To truly fix to bottom, we need CSS hacking or just placing them at end of script
+    pass
+
+def render_desktop_dashboard(df, services, supabase):
     st.session_state["v2_page"] = page_key
     # Sync radio button
     if page_key in NAV_OPTIONS:
@@ -428,7 +473,7 @@ def render_heatmap(supabase):
     """
     st.markdown(grid_html, unsafe_allow_html=True)
 
-def render_dashboard(df, services, supabase):
+def render_desktop_dashboard(df, services, supabase):
     render_top_navigation(df, services, supabase)
     
     # Heatmap
@@ -886,9 +931,89 @@ def render_budgets(df, services, supabase, user):
 # ==========================================
 # MAIN RENDER ENTRY
 # ==========================================
+def render_mobile_dashboard(df, services, supabase, user):
+    # Mobile Specific Dashboard
+    # 1. Hide Sidebar
+    st.markdown("<style>section[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
+    
+    st.markdown(f"### 📱 早上好, {user.email.split('@')[0]}")
+    
+    # 2. Big Cards (Vertical)
+    render_budget_cards(df, services, supabase)
+    
+    # 3. Recent Transactions (Simple List)
+    st.subheader("📝 最近流水")
+    if not df.empty:
+        df_sorted = df.sort_values(by=["date", "id"], ascending=[False, False]).head(5)
+        for _, row in df_sorted.iterrows():
+            cat = row["分类"]
+            icon_map = {"餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"}
+            icon = icon_map.get(cat, "💰")
+            
+            st.markdown(f"""
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:#1E1E1E; border-radius:12px; margin-bottom:10px; border:1px solid #333;">
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <div style="font-size:1.5rem;">{icon}</div>
+                    <div>
+                        <div style="font-weight:600; font-size:1rem; color:#eee;">{row['项目']}</div>
+                        <div style="font-size:0.8rem; color:#888;">{pd.to_datetime(row['日期']).strftime('%m-%d')} • {cat}</div>
+                    </div>
+                </div>
+                <div style="font-size:1.1rem; font-weight:700; color:#FF4B4B;">-${row['有效金额']:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+    # 4. Mobile Bottom Nav (Simulated via columns at bottom)
+    st.divider()
+    c1, c2, c3 = st.columns(3)
+    if c1.button("🏠 首页", key="mob_nav_home", use_container_width=True):
+        st.session_state["v2_page"] = "Dashboard"
+        st.rerun()
+    if c2.button("➕ 记一笔", key="mob_nav_add", use_container_width=True):
+         # Could open a dialog or switch to add page
+         with st.popover("记账", use_container_width=True):
+             st.write("快速记账")
+             # Simple form
+             with st.form("mob_quick_add"):
+                 item = st.text_input("项目")
+                 amt = st.number_input("金额", min_value=0.0)
+                 cat = st.selectbox("分类", CATEGORIES)
+                 if st.form_submit_button("提交"):
+                     services.add_expense(supabase, st.session_state["user"].id, pd.Timestamp.now(), item, amt, cat, "", "mobile")
+                     st.success("已记录")
+                     time.sleep(1)
+                     st.rerun()
+                     
+    if c3.button("🤖 助手", key="mob_nav_chat", use_container_width=True):
+        st.session_state["v2_page"] = "Smart Chat"
+        st.rerun()
+
+    # Handle Chat Page in Mobile separately if needed, but for now reuse simple
+    if st.session_state["v2_page"] == "Smart Chat":
+        render_chat(df, services, supabase, user)
+
+
+# ==========================================
+# MAIN RENDER ENTRY
+# ==========================================
 def render(supabase):
     inject_custom_css()
     
+    # Device Detection
+    device_type = utils.get_device_type()
+    
+    if device_type == "mobile":
+        # Mobile View Entry
+        user = st.session_state.get("user")
+        if not user:
+            st.error("请先登录")
+            return
+            
+        df = services.load_expenses(supabase)
+        render_mobile_dashboard(df, services, supabase, user)
+        return
+
+    # Desktop View Entry (Original Logic)
     with st.sidebar:
         logo_url = "https://api.dicebear.com/9.x/bottts/svg?seed=FinanceHelper&backgroundColor=00a6ff"
         import os
@@ -910,7 +1035,7 @@ def render(supabase):
     df = services.load_expenses(supabase)
     
     if page == "Dashboard":
-        render_dashboard(df, services, supabase)
+        render_desktop_dashboard(df, services, supabase)
     elif page == "Transactions":
         render_transactions(df, services, supabase)
     elif page == "Analysis":
