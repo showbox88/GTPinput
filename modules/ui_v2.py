@@ -65,39 +65,36 @@ def inject_custom_css():
         .kpi-purple { background: linear-gradient(135deg, #23074d 0%, #cc5333 100%); } 
         .kpi-dark { background: linear-gradient(to right, #232526, #414345); }
 
-        /* Ghost Button Strategy (Absolute Overlay) */
-        div[data-testid="column"] {
-            position: relative;
+        /* Ghost Button Strategy (Negative Margin Overlay) */
+        
+        /* 1. Target the button wrapper inside columns that have our KPI cards */
+        /* Support both legacy 'column' and new 'stColumn' test-ids */
+        div[data-testid*="olumn"]:has(#kpi-card-1) .stButton,
+        div[data-testid*="olumn"]:has(#kpi-card-2) .stButton,
+        div[data-testid*="olumn"]:has(#kpi-card-3) .stButton {
+            width: 100% !important;
+            margin-top: -140px !important; /* Pull button up over the card */
+            position: relative !important;
+            z-index: 10 !important;
+            opacity: 0 !important; /* Make invisible */
+            pointer-events: auto !important;
         }
 
-        /* Target the button inside the specific KPI columns */
-        div[data-testid="column"]:has(#kpi-card-1) .stButton button,
-        div[data-testid="column"]:has(#kpi-card-2) .stButton button,
-        div[data-testid="column"]:has(#kpi-card-3) .stButton button {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
+        /* 2. Target the button element itself to fill the wrapper */
+        div[data-testid*="olumn"]:has(#kpi-card-1) .stButton button,
+        div[data-testid*="olumn"]:has(#kpi-card-2) .stButton button,
+        div[data-testid*="olumn"]:has(#kpi-card-3) .stButton button {
             width: 100% !important;
-            height: 100% !important;
-            z-index: 10;
-            opacity: 0 !important; 
+            height: 140px !important;
             border: none !important;
         }
-        
-        div[data-testid="column"]:has(#kpi-card-1) .stButton,
-        div[data-testid="column"]:has(#kpi-card-2) .stButton,
-        div[data-testid="column"]:has(#kpi-card-3) .stButton {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-        }
 
+        /* 3. Ensure the Card is below the button in stacking context but visible */
         #kpi-card-1, #kpi-card-2, #kpi-card-3 {
             position: relative;
             z-index: 1;
-            /* No negative margins needed anymore */
+            height: 140px; /* Fixed height to match button */
+            pointer-events: none; /* Let clicks pass through if needed, though button is on top */
         }
 
         /* Sidebar */
