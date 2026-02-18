@@ -44,6 +44,15 @@ def inject_custom_css():
             margin-bottom: 12px;
         }
 
+        /* Global KPI Title Style (Used in Heatmap, Trend, Recent) */
+        .kpi-title {
+            font-size: 1.15rem;
+            opacity: 0.95;
+            font-weight: 700; /* Bold */
+            margin-bottom: 4px;
+            color: #eee;
+        }
+
         /* KPI Visual Card */
         .kpi-card-visual {
             border-radius: 16px;
@@ -58,7 +67,7 @@ def inject_custom_css():
             justify-content: center;
             box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
-        .kpi-card-visual .kpi-title { font-size: 1.15rem; opacity: 0.9; font-weight: 600; margin-bottom: 4px; }
+        .kpi-card-visual .kpi-title { margin-bottom: 4px; } /* Ensure margin logic stays */
         .kpi-card-visual .kpi-value { font-size: 1.8rem; font-weight: 800; margin: 4px 0; font-family: 'Inter', sans-serif; letter-spacing: -0.5px; }
         .kpi-card-visual .kpi-meta { font-size: 0.8rem; opacity: 0.6; margin-top: 4px; }
         
@@ -442,7 +451,7 @@ def render_heatmap(supabase):
         .heatmap-internal {{
             width: 100%;
             display: flex; flex-direction: column;
-            height: 275px; /* Reduced to 275px per user request */
+            height: 280px; /* Force height to match Trend Card (280px requested) */
             justify-content: space-between;
         }}
         .heatmap-inner-wrapper {{
