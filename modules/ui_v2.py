@@ -400,13 +400,13 @@ def render_top_navigation(df, services, supabase):
         st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
 
 def render_heatmap(supabase):
-    data = services.get_daily_activity(supabase, days=180) 
+    # Load more data for denser view (364 days = 52 weeks)
+    data = services.get_daily_activity(supabase, days=365) 
     if not data: return
     
-    # 26 weeks * 7 days = 182 days (Fill more width)
     tz = pytz.timezone("Asia/Shanghai")
     today = datetime.datetime.now(tz).date()
-    days_to_show = 182
+    days_to_show = 364
     start_date = today - datetime.timedelta(days=days_to_show - 1)
     
     cells = []
@@ -439,30 +439,32 @@ def render_heatmap(supabase):
     grid_html = f"""
     <style>
         .heatmap-container {{
-            background:#121212; padding:24px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:15px;
-            overflow-x: auto;
+            background:#121212; padding:20px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:0;
+            height: 100%;
+            display: flex; flex-direction: column; justify-content: center;
         }}
         .heatmap-inner-wrapper {{
-            width: max-content; /* Shrink fit to grid content */
+            width: 100%;
+            overflow-x: auto;
         }}
         .heatmap-grid {{
             display: grid;
-            grid-template-rows: repeat(7, 30px); 
+            grid-template-rows: repeat(7, 11px); /* 11px cells */
             grid-auto-flow: column;
-            gap: 5px;
+            gap: 2px;
             margin-bottom: 8px;
         }}
         .heatmap-cell {{
-            width: 30px;
-            height: 30px;
-            border-radius: 6px;
+            width: 11px;
+            height: 11px;
+            border-radius: 2px;
         }}
         .heatmap-labels {{
             display: flex;
             justify-content: space-between;
             color: #888;
-            font-size: 0.9rem;
-            padding: 0 4px;
+            font-size: 0.75rem;
+            padding: 0 2px;
             font-weight: 500;
         }}
     </style>
