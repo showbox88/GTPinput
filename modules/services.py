@@ -64,7 +64,9 @@ def get_daily_activity(supabase, days=180):
     Get daily transaction counts for heatmap.
     """
     try:
-        end_date = datetime.date.today()
+        import pytz
+        tz = pytz.timezone("Asia/Shanghai")
+        end_date = datetime.datetime.now(tz).date()
         start_date = end_date - datetime.timedelta(days=days)
         
         response = supabase.table("expenses") \
@@ -208,15 +210,15 @@ def update_recurring(supabase, rid, updates):
         return False
 
 def check_and_process_recurring(supabase, user_id):
-    """
-    Manually check if any recurring rules match today's date/weekday and add them if not already added this cycle.
-    """
     try:
+        import pytz
+        tz = pytz.timezone("Asia/Shanghai")
+        
         rules = get_recurring_rules(supabase)
         if not rules:
             return "没有发现活跃的订阅规则。"
         
-        today = pd.Timestamp.today()
+        today = pd.Timestamp.now(tz=tz)
         current_day = today.day
         current_weekday = today.weekday() # 0=Mon
         current_month_str = today.strftime("%Y-%m")

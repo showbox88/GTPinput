@@ -4,6 +4,7 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 import datetime
+import pytz
 import modules.services as services
 
 # Optional imports
@@ -21,10 +22,11 @@ def inject_custom_css():
     st.markdown("""
     <style>
         /* Global Font & Background */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        /* Removed Google Fonts to improve loading speed in China */
         
         .stApp {
             background-color: #000000;
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
         }
 
         div.block-container {
@@ -223,7 +225,8 @@ def navigate_to(page_key):
 
 def render_budget_cards(df, services, supabase):
     budgets = services.get_budgets(supabase)
-    this_month = pd.Timestamp.today().strftime("%Y-%m")
+    tz = pytz.timezone("Asia/Shanghai")
+    this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
     
     if budgets:
         # Prepare data
@@ -278,7 +281,8 @@ def render_budget_cards(df, services, supabase):
 
 def render_top_navigation(df, services, supabase):
     # KPIs Calculation
-    this_month = pd.Timestamp.today().strftime("%Y-%m")
+    tz = pytz.timezone("Asia/Shanghai")
+    this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
     
     if "月(yyyy-mm)" in df.columns:
         month_df = df[df["月(yyyy-mm)"] == this_month]
@@ -336,7 +340,8 @@ def render_heatmap(supabase):
     if not data: return
     
     # 26 weeks * 7 days = 182 days (Fill more width)
-    today = datetime.date.today()
+    tz = pytz.timezone("Asia/Shanghai")
+    today = datetime.datetime.now(tz).date()
     days_to_show = 182
     start_date = today - datetime.timedelta(days=days_to_show - 1)
     
@@ -417,7 +422,8 @@ def render_dashboard(df, services, supabase):
     # Heatmap
     render_heatmap(supabase)
     
-    this_month = pd.Timestamp.today().strftime("%Y-%m")
+    tz = pytz.timezone("Asia/Shanghai")
+    this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
     
     # Charts Area
     st.markdown("### 📊 支出趋势")
@@ -443,8 +449,11 @@ def render_dashboard(df, services, supabase):
     if not df.empty:
         # Sort and Group
         df_sorted = df.sort_values(by=["date", "id"], ascending=[False, False]).head(20)
-        today_str = datetime.date.today().strftime("%Y-%m-%d")
-        yesterday_str = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        
+        tz = pytz.timezone("Asia/Shanghai")
+        now_cn = datetime.datetime.now(tz)
+        today_str = now_cn.strftime("%Y-%m-%d")
+        yesterday_str = (now_cn - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         
         current_group = None
         
@@ -578,7 +587,8 @@ def render_subscriptions(df, services, supabase):
             r_amt = c_amt.number_input("金额 ($)", min_value=0.0, step=1.0)
             r_freq = c_freq.selectbox("周期", ["Monthly", "Weekly", "Yearly"])
             
-            r_date = st.date_input("首次/下次扣款日期", value=pd.Timestamp.today())
+            tz = pytz.timezone("Asia/Shanghai")
+            r_date = st.date_input("首次/下次扣款日期", value=pd.Timestamp.now(tz=tz))
             
             if st.form_submit_button("确认添加", type="primary", use_container_width=True):
                 services.add_recurring(supabase, st.session_state["user"].id, r_name, r_amt, r_cat, r_freq, r_date)
@@ -779,7 +789,8 @@ def render_budgets(df, services, supabase, user):
         st.subheader("📊 预算详情 (Budget Breakdown)")
         
         budgets = services.get_budgets(supabase)
-        this_month = pd.Timestamp.today().strftime("%Y-%m")
+        tz = pytz.timezone("Asia/Shanghai")
+        this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
         
         if budgets:
             # Prepare data
