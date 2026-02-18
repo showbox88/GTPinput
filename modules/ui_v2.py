@@ -119,8 +119,8 @@ def inject_custom_css():
         
         /* Unified Card Style for st.container(border=True) */
         div[data-testid="stVerticalBlockBorderWrapper"] {
-            background-color: #121212;
-            border: 1px solid #2A2A2A;
+            background-color: #121212 !important;
+            border: 1px solid #2A2A2A !important;
             border-radius: 16px;
             padding: 20px;
         }
@@ -400,13 +400,13 @@ def render_top_navigation(df, services, supabase):
         st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
 
 def render_heatmap(supabase):
-    # Load data for 3 months (~91 days)
-    data = services.get_daily_activity(supabase, days=100) 
+    # Load data for 6 months (~182 days)
+    data = services.get_daily_activity(supabase, days=200) 
     if not data: return
     
     tz = pytz.timezone("Asia/Shanghai")
     today = datetime.datetime.now(tz).date()
-    days_to_show = 91 # 13 weeks * 7 = 91 days
+    days_to_show = 182 # 26 weeks * 7 = 182 days
     start_date = today - datetime.timedelta(days=days_to_show - 1)
     
     cells = []
@@ -414,7 +414,6 @@ def render_heatmap(supabase):
     last_month = ""
     
     for i in range(days_to_show):
-        # ... existing logic ...
         d = start_date + datetime.timedelta(days=i)
         d_str = d.strftime("%Y-%m-%d")
         count = data.get(d_str, 0)
@@ -440,7 +439,8 @@ def render_heatmap(supabase):
     grid_html = f"""
     <style>
         .heatmap-container {{
-            background:#121212; padding:20px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:0;
+            background: #121212 !important; /* Enforce exact match */
+            padding:20px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:0;
             height: 310px; /* Fixed height to match Trend Card Container */
             display: flex; flex-direction: column; justify-content: center;
         }}
