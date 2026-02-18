@@ -442,7 +442,8 @@ def render_heatmap(supabase):
         .heatmap-internal {{
             width: 100%;
             display: flex; flex-direction: column;
-            min-height: 250px; /* Force height to match Trend Chart approx */
+            height: 280px; /* Force height to match Trend Card (Title + 240px Chart) */
+            justify-content: space-between;
         }}
         .heatmap-inner-wrapper {{
             width: 100%;
