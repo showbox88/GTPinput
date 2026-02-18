@@ -442,7 +442,7 @@ def render_heatmap(supabase):
         .heatmap-internal {{
             width: 100%;
             display: flex; flex-direction: column;
-            height: 280px; /* Force height to match Trend Card (Title + 240px Chart) */
+            height: 270px; /* Reduced to 270px to match Trend Chart (Title + 230px Chart) */
             justify-content: space-between;
         }}
         .heatmap-inner-wrapper {{
@@ -516,7 +516,7 @@ def render_desktop_dashboard(df, services, supabase):
                         margin=dict(l=0, r=0, t=0, b=0),
                         xaxis=dict(showgrid=False, tickfont=dict(color="#888")),
                         yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
-                        height=240 # adjusted to fill the container to match ~310px total
+                        height=230 # Reduced to 230 to match Heatmap 270px total
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 else:
