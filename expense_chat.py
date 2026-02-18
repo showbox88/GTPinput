@@ -124,7 +124,7 @@ def process_user_message(user_text, df):
         if "```json" in content:
             json_str = content.split("```json")[1].split("```")[0].strip()
         elif "```" in content:
-             json_str = content.split("```")[1].strip()
+            json_str = content.split("```")[1].strip()
         
         try:
             data = json.loads(json_str)
