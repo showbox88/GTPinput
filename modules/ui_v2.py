@@ -65,21 +65,39 @@ def inject_custom_css():
         .kpi-purple { background: linear-gradient(135deg, #23074d 0%, #cc5333 100%); } 
         .kpi-dark { background: linear-gradient(to right, #232526, #414345); }
 
-        /* Reverse Ghost Button Strategy */
-        div[data-testid="column"]:has(#kpi-card-1) button,
-        div[data-testid="column"]:has(#kpi-card-2) button,
-        div[data-testid="column"]:has(#kpi-card-3) button {
-            height: 140px !important;
-            opacity: 0 !important;
-            z-index: 1;
+        /* Ghost Button Strategy (Absolute Overlay) */
+        div[data-testid="column"] {
+            position: relative;
+        }
+
+        /* Target the button inside the specific KPI columns */
+        div[data-testid="column"]:has(#kpi-card-1) .stButton button,
+        div[data-testid="column"]:has(#kpi-card-2) .stButton button,
+        div[data-testid="column"]:has(#kpi-card-3) .stButton button {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
             width: 100% !important;
+            height: 100% !important;
+            z-index: 10;
+            opacity: 0 !important; 
+            border: none !important;
+        }
+        
+        div[data-testid="column"]:has(#kpi-card-1) .stButton,
+        div[data-testid="column"]:has(#kpi-card-2) .stButton,
+        div[data-testid="column"]:has(#kpi-card-3) .stButton {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
         }
 
         #kpi-card-1, #kpi-card-2, #kpi-card-3 {
-            margin-top: -140px !important; 
-            pointer-events: none; 
             position: relative;
-            z-index: 5;
+            z-index: 1;
+            /* No negative margins needed anymore */
         }
 
         /* Sidebar */
@@ -299,14 +317,10 @@ def render_top_navigation(df, services, supabase):
     subs = services.get_recurring_rules(supabase)
     active_subs = len(subs)
 
-    # Render Clickable KPI Cards with Ghost Button Strategy
-    c1, c2, c3 = st.columns(3)
-    
-    # Render Clickable KPI Cards with Ghost Button Strategy (Reverse: Button First, Overlay Second)
+    # Render Clickable KPI Cards with Ghost Button Strategy (Overlay)
     c1, c2, c3 = st.columns(3)
     
     with c1:
-        st.button(" ", key="btn_trans_ghost", use_container_width=True, on_click=navigate_to, args=("Transactions",))
         st.markdown(f"""
         <div id="kpi-card-1" class="kpi-card-visual kpi-blue">
             <div class="kpi-title">📅 本月支出 (Month)</div>
@@ -314,9 +328,9 @@ def render_top_navigation(df, services, supabase):
             <div class="kpi-meta">{count} 笔交易</div>
         </div>
         """, unsafe_allow_html=True)
+        st.button(" ", key="btn_trans_ghost", use_container_width=True, on_click=navigate_to, args=("Transactions",))
 
     with c2:
-        st.button(" ", key="btn_analysis_ghost", use_container_width=True, on_click=navigate_to, args=("Analysis",))
         st.markdown(f"""
         <div id="kpi-card-2" class="kpi-card-visual kpi-purple">
             <div class="kpi-title">💰 剩余预算 (Left)</div>
@@ -324,9 +338,9 @@ def render_top_navigation(df, services, supabase):
             <div class="kpi-meta">总额: ${budget_total:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
+        st.button(" ", key="btn_analysis_ghost", use_container_width=True, on_click=navigate_to, args=("Analysis",))
 
     with c3:
-        st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
         st.markdown(f"""
         <div id="kpi-card-3" class="kpi-card-visual kpi-dark">
             <div class="kpi-title">🔄 活跃订阅 (Subs)</div>
@@ -334,6 +348,7 @@ def render_top_navigation(df, services, supabase):
             <div class="kpi-meta">固定支出项目</div>
         </div>
         """, unsafe_allow_html=True)
+        st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
 
 def render_heatmap(supabase):
     data = services.get_daily_activity(supabase, days=180) 
