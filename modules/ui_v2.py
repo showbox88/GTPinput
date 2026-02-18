@@ -491,7 +491,22 @@ def render_top_navigation(df, services, supabase):
         
     budgets = services.get_budgets(supabase)
     budget_total = sum([b["amount"] for b in budgets])
-    left = budget_total - month_total
+    
+    # Calculate Remaining Budget correctly: Sum of (Budget - Spent) for each category
+    # This prevents non-budgeted spending from affecting the "Remaining Budget" KPI
+    left = 0
+    if budgets:
+        # Prepare data for calculation
+        df_calc = df.copy()
+        if "月(yyyy-mm)" in df_calc.columns:
+            df_calc = df_calc[df_calc["月(yyyy-mm)"] == this_month]
+            
+        for b in budgets:
+            spent = df_calc[df_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_calc.columns else 0
+            remaining = b["amount"] - spent
+            left += remaining
+    else:
+        left = 0
     
     subs = services.get_recurring_rules(supabase)
     active_subs = len(subs)
