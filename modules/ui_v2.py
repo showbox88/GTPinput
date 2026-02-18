@@ -442,7 +442,7 @@ def render_heatmap(supabase):
         .heatmap-internal {{
             width: 100%;
             display: flex; flex-direction: column;
-            height: 270px; /* Reduced to 270px to match Trend Chart (Title + 230px Chart) */
+            height: 275px; /* Reduced to 275px per user request */
             justify-content: space-between;
         }}
         .heatmap-inner-wrapper {{
@@ -525,7 +525,7 @@ def render_desktop_dashboard(df, services, supabase):
                  st.info("无数据")
 
     # Recent Records (Grouped)
-    st.markdown("### 🕒 最近记录")
+    st.markdown('<div class="kpi-title" style="margin-top:20px; margin-bottom:15px;">🕒 最近记录 (Recent)</div>', unsafe_allow_html=True)
     
     if not df.empty:
         # Sort and Group
