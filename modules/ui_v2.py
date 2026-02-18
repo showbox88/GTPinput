@@ -275,7 +275,7 @@ def render_mobile_bottom_nav():
     # To truly fix to bottom, we need CSS hacking or just placing them at end of script
     pass
 
-def render_desktop_dashboard(df, services, supabase):
+def navigate_to(page_key):
     st.session_state["v2_page"] = page_key
     # Sync radio button
     if page_key in NAV_OPTIONS:
