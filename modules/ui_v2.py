@@ -438,16 +438,16 @@ def render_heatmap(supabase):
 
     grid_html = f"""
     <style>
-        .heatmap-container {{
-            background: #121212 !important; /* Enforce exact match */
-            padding:20px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:0;
-            height: 310px; /* Fixed height to match Trend Card Container */
-            display: flex; flex-direction: column; justify-content: center;
+        /* Internal styling only - Container is handled by Streamlit */
+        .heatmap-internal {{
+            width: 100%;
+            display: flex; flex-direction: column;
+            min-height: 250px; /* Force height to match Trend Chart approx */
         }}
         .heatmap-inner-wrapper {{
             width: 100%;
             overflow-x: auto;
-            display: flex; justify-content: center; /* Center the grid */
+            margin-top: 10px;
         }}
         .heatmap-grid {{
             display: grid;
@@ -470,7 +470,7 @@ def render_heatmap(supabase):
             font-weight: 500;
         }}
     </style>
-    <div class="heatmap-container">
+    <div class="heatmap-internal">
         <div class="kpi-title" style="margin-bottom:15px;">🔥 活跃分布 (Activity)</div>
         <div class="heatmap-inner-wrapper">
             <div>
@@ -493,12 +493,12 @@ def render_desktop_dashboard(df, services, supabase):
     c_heat, c_trend = st.columns(2)
     
     with c_heat:
-        render_heatmap(supabase)
+        # Wrap Heatmap in Streamlit Container for consistent styling
+        with st.container(border=True):
+            render_heatmap(supabase)
         
     with c_trend:
-        # Use a custom div to ensure exact height match if st.container is finicky
-        # But st.container(border=True) with a fixed height chart inside should work if we pad it.
-        # Plotly default margin might be adding up.
+        # Wrap Trend in Streamlit Container for consistent styling
         with st.container(border=True):
             st.markdown('<div class="kpi-title" style="margin-bottom:15px;">📉 支出趋势 (Trend)</div>', unsafe_allow_html=True)
             
