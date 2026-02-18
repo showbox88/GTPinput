@@ -33,7 +33,11 @@ The entry point. It handles:
 The comprehensive UI library.
 - **`render()`**: Main router for sub-pages.
 - **`render_sidebar_nav()`**: Custom CSS-styled card navigation.
-- **`render_dashboard()`**: KPI cards, Area charts, Recent transactions.
+- **`render_dashboard()`**: 
+    - **KPI Cards**: Total spend, trends, transaction count.
+    - **Budget Cards**: Visual progress bars with health gradients.
+    - **Heatmap**: Github-style activity calendar.
+    - **Trend Chart**: Monthly spending bar chart.
 - **`render_chat()`**: Chat interface + Settings expander (Logo upload, Logout).
 - **`render_budgets()`**: Budget visuals + Management popover.
 - **`render_subscriptions()`**: Recurring expense management.

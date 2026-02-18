@@ -371,7 +371,7 @@ def render_budget_cards(df, services, supabase):
                     }}
                     .bc-top {{
                         background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); /* Professional Dark Blue Fixed */
-                        padding: 24px;
+                        padding: 10px 24px; /* Reduced vertical padding further */
                         color: white;
                         position: relative;
                     }}
@@ -380,7 +380,7 @@ def render_budget_cards(df, services, supabase):
                     .bc-cat-name {{ font-size: 1.4rem; font-weight: 700; opacity: 0.95; }}
                     .bc-icon-box {{ 
                         background: rgba(255,255,255,0.15); 
-                        width: 40px; height: 40px; border-radius: 12px; 
+                        width: 60px; height: 60px; border-radius: 18px; 
                         display: flex; align-items: center; justify-content: center; 
                         backdrop-filter: blur(4px);
                     }}
@@ -400,17 +400,17 @@ def render_budget_cards(df, services, supabase):
                     }}
                     .track-container {{
                         position: relative;
-                        height: 48px; /* More space for marker */
+                        height: 70px; /* Increased space for 40px bar */
                         margin-bottom: 8px;
                         /* Removed flex to rely on absolute positioning */
                     }}
                     .track-bg {{
                         position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
-                        height: 12px; background: #333; border-radius: 6px; 
+                        height: 40px; background: #333; border-radius: 20px; /* 40px thick */
                     }}
                     .track-fill {{
                         position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-                        height: 12px; border-radius: 6px; 
+                        height: 40px; border-radius: 20px; /* 40px thick */
                         /* width and background moved to inline style */
                         box-shadow: 0 0 10px rgba(0,0,0,0.3);
                         transition: width 0.5s ease;
@@ -422,7 +422,7 @@ def render_budget_cards(df, services, supabase):
                         transform: translateX(-50%);
                         display: flex; flex-direction: column; align-items: center;
                         z-index: 2;
-                        height: 100%;
+                        height: 50%; /* End at the vertical center (middle of the bar) */
                         pointer-events: none;
                     }}
                     .marker-bubble {{
@@ -435,8 +435,19 @@ def render_budget_cards(df, services, supabase):
                     }}
                     .marker-line {{
                         width: 2px; background: #fff; opacity: 0.8;
-                        flex-grow: 1; /* Stretch to bottom */
-                        margin-bottom: 50%; /* Stop roughly at center of track */
+                        flex-grow: 1; /* Stretch to fill the 50% height */
+                    }}
+                    
+                    .track-text-overlay {{
+                        position: absolute; left: 50%; top: 50%; 
+                        transform: translate(-50%, -50%);
+                        color: #fff;
+                        font-weight: 800;
+                        font-size: 0.9rem;
+                        z-index: 3;
+                        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+                        pointer-events: none;
+                        white-space: nowrap;
                     }}
                     
                     .bc-advice {{
@@ -448,7 +459,7 @@ def render_budget_cards(df, services, supabase):
                     <div class="bc-top">
                         <div class="bc-cat-row">
                             <div class="bc-cat-name">{b['category']}</div>
-                            <div class="bc-icon-box" style="font-size: 1.2rem;">{icon}</div>
+                            <div class="bc-icon-box" style="font-size: 1.8rem;">{icon}</div>
                         </div>
                         <div class="bc-amount-big">${left:,.0f}</div>
                         <div class="bc-amount-sub">left of ${limit:,.0f}</div>
@@ -456,12 +467,14 @@ def render_budget_cards(df, services, supabase):
                     <div class="bc-bottom">
                         <div class="timeline-row">
                             <span>{start_str}</span>
-                            <span style="font-size: 1rem; color: #eee; font-weight: 700;">{int(pct_clamped)}%</span>
+                            <!-- Percentage moved to progress bar -->
                             <span>{end_str}</span>
                         </div>
                         <div class="track-container">
                             <div class="track-bg"></div>
-                            <div class="track-fill" style="width: {pct_clamped}%; background: {bar_color};"></div>
+                            <div class="track-fill" style="width: {pct_clamped}%; background: {bar_color};">
+                                <div class="track-text-overlay">{int(pct_clamped)}%</div>
+                            </div>
                             <div class="marker-today" style="left: {time_pct}%;">
                                 <div class="marker-bubble">Today</div>
                                 <div class="marker-line"></div>
