@@ -440,42 +440,45 @@ def render_heatmap(supabase):
     <style>
         .heatmap-container {{
             background:#121212; padding:20px; border-radius:16px; border:1px solid #2A2A2A; margin-bottom:0;
-            height: 100%;
+            height: 280px; /* Fixed height to match Trend Card */
             display: flex; flex-direction: column; justify-content: center;
         }}
         .heatmap-inner-wrapper {{
             width: 100%;
             overflow-x: auto;
+            display: flex; justify-content: center; /* Center the grid */
         }}
         .heatmap-grid {{
             display: grid;
-            grid-template-rows: repeat(7, 11px); /* 11px cells */
+            grid-template-rows: repeat(7, 20px); /* 20px cells */
             grid-auto-flow: column;
-            gap: 2px;
+            gap: 3px;
             margin-bottom: 8px;
         }}
         .heatmap-cell {{
-            width: 11px;
-            height: 11px;
-            border-radius: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
         }}
         .heatmap-labels {{
             display: flex;
             justify-content: space-between;
             color: #888;
-            font-size: 0.75rem;
+            font-size: 0.8rem;
             padding: 0 2px;
             font-weight: 500;
         }}
     </style>
     <div class="heatmap-container">
-        <div style="font-size:1.15rem; opacity:0.9; font-weight:600; color:#eee; margin-bottom:15px;">活跃分布 (Activity)</div>
+        <div class="kpi-title" style="margin-bottom:15px;">🔥 活跃分布 (Activity)</div>
         <div class="heatmap-inner-wrapper">
-            <div class="heatmap-grid">
-                {''.join(cells)}
-            </div>
-            <div class="heatmap-labels">
-                {labels_html}
+            <div>
+                <div class="heatmap-grid">
+                    {''.join(cells)}
+                </div>
+                <div class="heatmap-labels">
+                    {labels_html}
+                </div>
             </div>
         </div>
     </div>
@@ -493,7 +496,7 @@ def render_desktop_dashboard(df, services, supabase):
         
     with c_trend:
         with st.container(border=True):
-            st.markdown('<div style="font-size:1.15rem; opacity:0.9; font-weight:600; color:#eee; margin-bottom:15px;">📊 支出趋势 (Trend)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="kpi-title" style="margin-bottom:15px;">📉 支出趋势 (Trend)</div>', unsafe_allow_html=True)
             
             tz = pytz.timezone("Asia/Shanghai")
             this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
@@ -508,7 +511,7 @@ def render_desktop_dashboard(df, services, supabase):
                         margin=dict(l=0, r=0, t=0, b=0),
                         xaxis=dict(showgrid=False, tickfont=dict(color="#888")),
                         yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
-                        height=180
+                        height=220 # Increased to match Heatmap container height (approx 280px total)
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 else:
