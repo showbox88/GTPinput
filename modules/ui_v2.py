@@ -476,29 +476,51 @@ def render_heatmap(supabase):
 def render_desktop_dashboard(df, services, supabase):
     render_top_navigation(df, services, supabase)
     
-    # Heatmap
-    render_heatmap(supabase)
+    # Heatmap & Trend Chart Side-by-Side
+    c_heat, c_trend = st.columns([1.5, 1])
     
-    tz = pytz.timezone("Asia/Shanghai")
-    this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
-    
-    # Charts Area
-    st.markdown("### 📊 支出趋势")
-    if "月(yyyy-mm)" in df.columns:
-        daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
-        if not daily_trend.empty:
-            fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)", 
-                plot_bgcolor="rgba(0,0,0,0)", 
-                margin=dict(l=0, r=0, t=10, b=0),
-                xaxis=dict(showgrid=False, tickfont=dict(color="#888")),
-                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
-                height=250
-            )
-            st.plotly_chart(fig, use_container_width=True)
+    with c_heat:
+        render_heatmap(supabase)
+        
+    with c_trend:
+        # Wrap Trend in Card Style to match Heatmap
+        st.markdown("""
+        <style>
+            .trend-card {
+                background: #121212;
+                border: 1px solid #2A2A2A;
+                border-radius: 16px;
+                padding: 20px;
+                height: 100%;
+                min-height: 220px;
+            }
+        </style>
+        <div class="trend-card">
+            <div style="font-size:1.15rem; opacity:0.9; font-weight:600; color:#eee; margin-bottom:15px;">📊 支出趋势 (Trend)</div>
+        """, unsafe_allow_html=True)
+        
+        tz = pytz.timezone("Asia/Shanghai")
+        this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
+        
+        if "月(yyyy-mm)" in df.columns:
+            daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
+            if not daily_trend.empty:
+                fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
+                fig.update_layout(
+                    paper_bgcolor="rgba(0,0,0,0)", 
+                    plot_bgcolor="rgba(0,0,0,0)", 
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    xaxis=dict(showgrid=False, tickfont=dict(color="#888")),
+                    yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
+                    height=200
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("本月暂无数据")
         else:
-            st.info("本月暂无数据")
+             st.info("无数据")
+             
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Recent Records (Grouped)
     st.markdown("### 🕒 最近记录")
