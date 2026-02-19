@@ -7,6 +7,7 @@ import datetime
 import pytz
 import modules.services as services
 import modules.utils as utils
+import streamlit.components.v1 as components
 
 # Optional imports
 try:
@@ -361,16 +362,19 @@ def render_budget_cards(df, services, supabase):
                     advice_text = f"最后一天，剩余预算 ${left:.0f}"
 
                 # Health & Color Determination
-                # Logic: Compare Spending Pct vs Time Pct
+                # Logic: Progressive Gradient based on usage pct
                 if pct > 1.0:
-                    bar_color = "linear-gradient(90deg, #FF416C, #FF4B2B)" # Red
+                    bar_color = "linear-gradient(90deg, #EB5757, #FF4B2B)" # Red (Over)
                     text_color = "#FF4B4B"
-                elif pct * 100 > time_pct + 10:
-                    bar_color = "linear-gradient(90deg, #F2994A, #F2C94C)" # Orange
+                elif pct > 0.8:
+                    bar_color = "linear-gradient(90deg, #F2994A, #F2C94C)" # Orange (Warning)
                     text_color = "#F2C94C"
-                else:
-                    bar_color = "linear-gradient(90deg, #2F80ED, #56CCF2)" # Blue/Cyan
+                elif pct > 0.5:
+                    bar_color = "linear-gradient(90deg, #2F80ED, #56CCF2)" # Light Blue (Normal)
                     text_color = "#56CCF2"
+                else:
+                    bar_color = "linear-gradient(90deg, #0f2027, #2F80ED)" # Dark Blue to Blue (Low)
+                    text_color = "#2F80ED"
                 
                 icon = icon_map.get(b["category"], "💰")
                 
@@ -503,7 +507,11 @@ def render_budget_cards(df, services, supabase):
     else:
         st.info("暂无预算配置 (No Budgets Set)")
 
-def render_top_navigation(df, services, supabase):
+def render_top_navigation(df, services, supabase, is_mobile=False):
+    if is_mobile:
+        render_unified_kpi_card(df, services, supabase)
+        return
+
     # KPIs Calculation
     tz = pytz.timezone("Asia/Shanghai")
     this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
@@ -549,7 +557,8 @@ def render_top_navigation(df, services, supabase):
             <div class="kpi-meta">{count} 笔交易</div>
         </div>
         """, unsafe_allow_html=True)
-        st.button(" ", key="btn_trans_ghost", use_container_width=True, on_click=navigate_to, args=("Transactions",))
+        target_page = "Dashboard" if is_mobile else "Transactions"
+        st.button(" ", key="btn_trans_ghost", use_container_width=True, on_click=navigate_to, args=(target_page,))
 
     with c2:
         st.markdown(f"""
@@ -571,14 +580,28 @@ def render_top_navigation(df, services, supabase):
         """, unsafe_allow_html=True)
         st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
 
-def render_heatmap(supabase):
+def render_heatmap(supabase, is_mobile=False):
     # Load data for 6 months (~182 days)
     data = services.get_daily_activity(supabase, days=200) 
     if not data: return
     
     tz = pytz.timezone("Asia/Shanghai")
     today = datetime.datetime.now(tz).date()
-    days_to_show = 182 # 26 weeks * 7 = 182 days
+    
+    # Responsive Settings
+    if is_mobile:
+        days_to_show = 105 # 15 weeks
+        cell_size = "14px"
+        gap = "2px"
+        heatmap_height = "auto"
+        heatmap_justify = "flex-start"
+    else:
+        days_to_show = 182 # 26 weeks
+        cell_size = "20px"
+        gap = "3px"
+        heatmap_height = "280px" # Force height to match Trend Card
+        heatmap_justify = "space-between"
+
     start_date = today - datetime.timedelta(days=days_to_show - 1)
     
     cells = []
@@ -614,24 +637,24 @@ def render_heatmap(supabase):
         .heatmap-internal {{
             width: 100%;
             display: flex; flex-direction: column;
-            height: 280px; /* Force height to match Trend Card (280px requested) */
-            justify-content: space-between;
+            height: {heatmap_height}; 
+            justify-content: {heatmap_justify};
         }}
         .heatmap-inner-wrapper {{
             width: 100%;
             overflow-x: auto;
-            margin-top: 10px;
+            margin-top: 3px;
         }}
         .heatmap-grid {{
             display: grid;
-            grid-template-rows: repeat(7, 20px); /* 20px cells */
+            grid-template-rows: repeat(7, {cell_size}); /* Dynamic cell size */
             grid-auto-flow: column;
-            gap: 3px;
+            gap: {gap};
             margin-bottom: 8px;
         }}
         .heatmap-cell {{
-            width: 20px;
-            height: 20px;
+            width: {cell_size};
+            height: {cell_size};
             border-radius: 4px;
         }}
         .heatmap-labels {{
@@ -644,7 +667,7 @@ def render_heatmap(supabase):
         }}
     </style>
     <div class="heatmap-internal">
-        <div class="kpi-title" style="margin-bottom:15px;">🔥 活跃分布 (Activity)</div>
+        <div class="kpi-title" style="margin-bottom:5px;">🔥 活跃分布 (Activity)</div>
         <div class="heatmap-inner-wrapper">
             <div>
                 <div class="heatmap-grid">
@@ -659,8 +682,8 @@ def render_heatmap(supabase):
     """
     st.markdown(grid_html, unsafe_allow_html=True)
 
-def render_desktop_dashboard(df, services, supabase):
-    render_top_navigation(df, services, supabase)
+def render_desktop_dashboard(df, services, supabase, is_mobile=False):
+    render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     
     # Heatmap & Trend Chart Side-by-Side (50/50 Split)
     c_heat, c_trend = st.columns(2)
@@ -690,7 +713,7 @@ def render_desktop_dashboard(df, services, supabase):
                         yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
                         height=230 # Reduced to 230 to match Heatmap 270px total
                     )
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, config={"staticPlot": is_mobile})
                 else:
                     st.info("本月暂无数据")
             else:
@@ -749,8 +772,8 @@ def render_desktop_dashboard(df, services, supabase):
     else:
         st.caption("无最近记录")
                 
-def render_analysis(df, services, supabase):
-    render_top_navigation(df, services, supabase)
+def render_analysis(df, services, supabase, is_mobile=False):
+    render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     st.header("深度分析")
     
     # === Budget Progress Section (Visuals & Link to Management) ===
@@ -791,7 +814,12 @@ def render_analysis(df, services, supabase):
                  margin=dict(t=20, b=20, l=20, r=20), 
                  showlegend=False
              )
-             st.plotly_chart(fig, use_container_width=True)
+             fig.update_layout(
+                 paper_bgcolor="rgba(0,0,0,0)", 
+                 margin=dict(t=20, b=20, l=20, r=20), 
+                 showlegend=False
+             )
+             st.plotly_chart(fig, use_container_width=True, config={"staticPlot": is_mobile})
              
     with c2:
         st.subheader("月度对比 (Monthly)")
@@ -805,10 +833,10 @@ def render_analysis(df, services, supabase):
                 yaxis=dict(gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
                 xaxis=dict(tickfont=dict(color="#888"))
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, config={"staticPlot": is_mobile})
 
-def render_subscriptions(df, services, supabase):
-    render_top_navigation(df, services, supabase)
+def render_subscriptions(df, services, supabase, is_mobile=False):
+    render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     st.header("订阅管理 (Subscriptions)")
     
     rules = services.get_recurring_rules(supabase)
@@ -902,8 +930,8 @@ def render_subscriptions(df, services, supabase):
                  st.cache_data.clear()
                  st.rerun()
 
-def render_transactions(df, services, supabase):
-    render_top_navigation(df, services, supabase)
+def render_transactions(df, services, supabase, is_mobile=False):
+    render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     st.header("所有交易")
     
     # Filter Toolbar
@@ -954,10 +982,19 @@ def render_transactions(df, services, supabase):
             st.cache_data.clear()
             st.rerun()
 
-def render_chat(df, services, supabase, user):
-    render_top_navigation(df, services, supabase)
+def render_chat(df, services, supabase, user, is_mobile=False):
+    render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     st.header("AI 智能助手")
     st.caption("告诉我你花了什么钱，或者问我财务问题。")
+
+    if is_mobile:
+        st.markdown("""
+        <style>
+            [data-testid="stChatInput"] {
+                bottom: 20px !important;
+            }
+        </style>
+        """, unsafe_allow_html=True)
 
     chat_container = st.container(height=500, border=True)
     if "messages" not in st.session_state:
@@ -1131,8 +1168,22 @@ def render_chat(df, services, supabase, user):
             st.session_state["session"] = None
             st.rerun()
 
-def render_budgets(df, services, supabase, user):
-    render_top_navigation(df, services, supabase)
+    # Autofocus for Mobile Experience
+    if is_mobile:
+        components.html("""
+            <script>
+                function focusChat() {
+                    const textArea = window.parent.document.querySelector('textarea[data-testid="stChatInputTextArea"]');
+                    if (textArea) {
+                        textArea.focus();
+                    }
+                }
+                setTimeout(focusChat, 500);
+            </script>
+        """, height=0, width=0)
+
+def render_budgets(df, services, supabase, user, is_mobile=False):
+    render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     st.header("预算管理 (Budgets)")
     
     # === 1. Budget Breakdown (Visuals) ===
@@ -1225,66 +1276,299 @@ def render_budgets(df, services, supabase, user):
 # ==========================================
 # MAIN RENDER ENTRY
 # ==========================================
+# ==========================================
+# MOBILE SPECIFIC COMPONENTS
+# ==========================================
+def render_unified_kpi_card(df, services, supabase):
+    # KPIs Calculation
+    tz = pytz.timezone("Asia/Shanghai")
+    this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
+    
+    if "月(yyyy-mm)" in df.columns:
+        month_df = df[df["月(yyyy-mm)"] == this_month]
+        month_total = month_df["有效金额"].sum()
+    else:
+        month_total = 0
+        
+    budgets = services.get_budgets(supabase)
+    
+    left = 0
+    if budgets:
+        df_calc = df.copy()
+        if "月(yyyy-mm)" in df_calc.columns:
+            df_calc = df_calc[df_calc["月(yyyy-mm)"] == this_month]
+        for b in budgets:
+            spent = df_calc[df_calc["分类"] == b["category"]]["有效金额"].sum() if "分类" in df_calc.columns else 0
+            left += (b["amount"] - spent)
+            
+    subs = services.get_recurring_rules(supabase)
+    active_subs = len(subs)
+
+    st.markdown(f"""
+    <style>
+    .uni-card {{
+        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+        border-radius: 20px;
+        padding: 24px;
+        color: white;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(47, 128, 237, 0.4);
+    }}
+    .uni-label {{ font-size: 0.9rem; opacity: 0.9; font-weight: 500; margin-bottom: 5px; }}
+    .uni-value-big {{ font-size: 2.2rem; font-weight: 800; line-height: 1.1; }}
+    
+    .uni-divider {{ height: 1px; background: rgba(255,255,255,0.2); margin: 15px 0; }}
+    
+    .uni-bottom {{ display: flex; justify-content: space-between; }}
+    .uni-stat {{ display: flex; flex-direction: column; }}
+    .uni-label-sm {{ font-size: 0.75rem; opacity: 0.8; }}
+    .uni-value-sm {{ font-size: 1.2rem; font-weight: 700; }}
+    </style>
+    
+    <div class="uni-card">
+        <div>
+            <div class="uni-label">本月支出 (Month Spend)</div>
+            <div class="uni-value-big">${month_total:,.2f}</div>
+        </div>
+        <div class="uni-divider"></div>
+        <div class="uni-bottom">
+            <div class="uni-stat">
+                <div class="uni-label-sm">剩余预算 (Remaining)</div>
+                <div class="uni-value-sm">${left:,.2f}</div>
+            </div>
+            <div class="uni-stat" style="align-items: flex-end;">
+                <div class="uni-label-sm">活跃订阅 (Subs)</div>
+                <div class="uni-value-sm">{active_subs}</div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+def render_mobile_floating_bar():
+    # Current Page
+    current_page = st.session_state.get("v2_page", "Dashboard")
+    
+    # Logic
+    if current_page == "Dashboard":
+        target_page = "Smart Chat"
+        icon = "🤖"
+        btn_text = "AI 助手"
+    else:
+        target_page = "Dashboard"
+        icon = "🏠"
+        btn_text = "返回首页"
+
+    # Hidden Streamlit Button (Workhorse)
+    # We use a wrapper to help locate it, though we mainly rely on text content
+    st.markdown('<div class="nav-trigger-wrapper">', unsafe_allow_html=True)
+    if st.button("Toggle_Nav_Hidden", key=f"btn_hidden_nav_{target_page}"):
+        st.session_state["v2_page"] = target_page
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Floating Bar using components.html (Iframe) to inject into PARENT DOM
+    # This ensures position:fixed works relative to the viewport, not the iframe
+    
+    # We construct the JS payload
+    js_payload = f"""
+    <script>
+        const parentDoc = window.parent.document;
+        
+        // 1. Hide the Toggle Button (Repeatedly to fight rerenders)
+        function hideTrigger() {{
+            const buttons = parentDoc.getElementsByTagName('button');
+            for (let i = 0; i < buttons.length; i++) {{
+                if (buttons[i].innerText.includes("Toggle_Nav_Hidden")) {{
+                    buttons[i].style.position = "fixed";
+                    buttons[i].style.top = "-9999px";
+                    buttons[i].style.opacity = "0";
+                    buttons[i].style.pointerEvents = "none";
+                    buttons[i].style.zIndex = "-1";
+                }}
+            }}
+        }}
+        
+        // 2. The click handler (Attached to window of iframe, called by injected element? No)
+        // The injected element is in parentDoc. Its onclick="window.triggerNavClick()" looks for function in PARENT window.
+        // So we must attach the function to PARENT window.
+        parentDoc.defaultView.mobileNavClick = function() {{
+            const buttons = parentDoc.getElementsByTagName('button');
+            for (let i = 0; i < buttons.length; i++) {{
+                if (buttons[i].innerText.includes("Toggle_Nav_Hidden")) {{
+                    buttons[i].click();
+                    return;
+                }}
+            }}
+        }};
+
+        // 3. Inject Floating Bar Container
+        const barId = 'my-mobile-float-bar-overlay';
+        let barContainer = parentDoc.getElementById(barId);
+        
+        if (!barContainer) {{
+            barContainer = parentDoc.createElement('div');
+            barContainer.id = barId;
+            parentDoc.body.appendChild(barContainer);
+        }}
+        
+        // 4. Update Content (Re-render safe)
+        // We use a button-like div to avoid default button form submission issues just in case
+        barContainer.innerHTML = `
+            <style>
+                #my-mobile-float-bar-overlay .mobile-float-bar {{
+                    position: fixed; bottom: 0; left: 0; width: 100%; height: 80px;
+                    background: transparent;
+                    border-top: none;
+                    display: flex; align-items: center; justify-content: flex-end;
+                    padding-right: 24px; z-index: 999999;
+                    box-shadow: none;
+                    box-sizing: border-box;
+                    font-family: sans-serif;
+                    pointer-events: none; /* Let clicks pass through empty areas */
+                }}
+                #my-mobile-float-bar-overlay .float-btn {{
+                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+                    color: white; border: none; padding: 12px 24px;
+                    border-radius: 30px; font-weight: 600; font-size: 16px;
+                    display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+                    box-shadow: 0 4px 15px rgba(30, 60, 114, 0.4);
+                    transition: transform 0.1s ease;
+                    user-select: none;
+                    width: 140px; /* Fixed width for consistency */
+                    pointer-events: auto; /* Re-enable clicks on button */
+                }}
+                #my-mobile-float-bar-overlay .float-btn:active {{ transform: scale(0.95); opacity: 0.9; }}
+            </style>
+            <div class="mobile-float-bar">
+                <div class="float-btn { 'home' if target_page == 'Dashboard' else '' }" onclick="window.mobileNavClick()">
+                    <span>{icon}</span> {btn_text}
+                </div>
+            </div>
+        `;
+        
+        // Loop to ensuring hiding works
+        setInterval(hideTrigger, 500);
+        hideTrigger();
+    </script>
+    """
+    components.html(js_payload, height=0, width=0)
+
 def render_mobile_dashboard(df, services, supabase, user):
-    # Mobile Specific Dashboard
-    # 1. Hide Sidebar
-    st.markdown("<style>section[data-testid='stSidebar'] {display: none;}</style>", unsafe_allow_html=True)
+    # Ultra-Compact CSS for Mobile
+    st.markdown("""
+        <style>
+            /* Mobile General Cleanup */
+            section[data-testid='stSidebar'] {display: none;}
+            .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; }
+            
+            /* Ultra-Compact Budget Cards */
+            .budget-card-container { margin-bottom: 12px !important; box-shadow: none !important; border: 1px solid #333; }
+            .bc-top { 
+                padding: 10px 16px !important; 
+                display: flex !important; 
+                flex-direction: row !important;
+                align-items: center !important; 
+                justify-content: space-between !important; 
+            }
+            .bc-cat-row { margin-bottom: 0 !important; display: flex; align-items: center; }
+            .bc-cat-name { font-size: 1rem !important; margin-right: 8px !important; }
+            .bc-icon-box { 
+                width: 28px !important; height: 28px !important; 
+                font-size: 0.9rem !important; border-radius: 8px !important;
+                display: flex !important;
+            }
+            
+            .bc-bottom { padding: 4px 16px 12px 16px !important; background: transparent !important; border-top: none !important;}
+            
+            /* Hide elements to save space */
+            .bc-amount-sub { font-size: 0.75rem !important; opacity: 0.6; }
+            .timeline-row { display: none !important; }
+            .bc-advice { display: none !important; }
+            .marker-today { display: none !important; }
+            
+            /* Slim Progress Bar (28px - Increased) */
+            .track-container { height: 28px !important; margin: 0 !important; background: rgba(255,255,255,0.05); border-radius: 14px; }
+            .track-bg { height: 28px !important; border-radius: 14px; background: transparent !important; }
+            .track-fill { height: 28px !important; border-radius: 14px; box-shadow: none !important; }
+            .track-text-overlay { display: block !important; font-size: 0.8rem !important; line-height: 28px !important; font-weight: 700 !important; } /* Show % */
+            
+            /* Section Headers */
+            h3 { font-size: 1rem !important; margin-bottom: 10px !important; opacity: 0.9; margin-top: 20px !important;}
+        </style>
+    """, unsafe_allow_html=True)
+
+    # === Mobile Router ===
+    if st.session_state.get("v2_page") == "Smart Chat":
+        # Floating Bar handles navigation back
+        render_chat(df, services, supabase, user, is_mobile=True)
+        render_mobile_floating_bar()
+        return
+
+    # === Dashboard Content ===
+    # 1. Unified KPI Card
+    render_unified_kpi_card(df, services, supabase)
     
-    st.markdown(f"### 📱 早上好, {user.email.split('@')[0]}")
-    
-    # 2. Big Cards (Vertical)
+    # 2. Category Pie Chart (Analysis)
+    st.subheader("📊 分类占比")
+    if not df.empty and "分类" in df.columns:
+         icon_map = {"餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"}
+         df_pie = df.copy()
+         df_pie["IconLabel"] = df_pie["分类"].apply(lambda x: f"{icon_map.get(x, '💰')} {x}")
+         
+         fig = px.pie(df_pie, names="IconLabel", values="有效金额", hole=0.6, 
+             color_discrete_sequence=["#2F80ED", "#56CCF2", "#6FCF97", "#F2C94C", "#BB6BD9", "#EB5757", "#9B51E0", "#2D9CDB"])
+         fig.update_traces(textinfo='percent+label', textposition='inside', textfont_color="white")
+         fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=0, b=0, l=0, r=0), showlegend=False, height=260)
+         st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True})
+
+    # 3. Budget Cards
+    st.subheader("💰 预算详情")
     render_budget_cards(df, services, supabase)
-    
-    # 3. Recent Transactions (Simple List)
-    st.subheader("📝 最近流水")
+
+    # 4. Trend Chart
+    st.subheader("📉 支出趋势")
+    tz = pytz.timezone("Asia/Shanghai")
+    this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
+    if "月(yyyy-mm)" in df.columns:
+        daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
+        if not daily_trend.empty:
+            fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
+                margin=dict(l=0, r=0, t=0, b=0),
+                xaxis=dict(showgrid=False, visible=False, title=None), 
+                yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", visible=True, title=None),
+                height=150
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True})
+        else:
+            st.info("本月暂无数据")
+            
+    # 5. Heatmap
+    with st.container():
+        # st.markdown('<div style="margin-top:20px;"></div>', unsafe_allow_html=True) # Removed spacer
+        render_heatmap(supabase, is_mobile=True)
+
+    # 6. Recent Records
+    st.subheader("📝 最近记录")
     if not df.empty:
         df_sorted = df.sort_values(by=["date", "id"], ascending=[False, False]).head(5)
         for _, row in df_sorted.iterrows():
             cat = row["分类"]
             icon_map = {"餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"}
             icon = icon_map.get(cat, "💰")
-            
             st.markdown(f"""
-            <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; background:#1E1E1E; border-radius:12px; margin-bottom:10px; border:1px solid #333;">
-                <div style="display:flex; align-items:center; gap:15px;">
-                    <div style="font-size:1.5rem;">{icon}</div>
-                    <div>
-                        <div style="font-weight:600; font-size:1rem; color:#eee;">{row['项目']}</div>
-                        <div style="font-size:0.8rem; color:#888;">{pd.to_datetime(row['日期']).strftime('%m-%d')} • {cat}</div>
-                    </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:#181818; border-radius:12px; margin-bottom:8px; border:1px solid #2A2A2A;">
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <div style="font-size:1.2rem;">{icon}</div>
+                    <div style="font-weight:500; font-size:0.95rem; color:#eee;">{row['项目']}</div>
                 </div>
-                <div style="font-size:1.1rem; font-weight:700; color:#FF4B4B;">-${row['有效金额']:,.0f}</div>
+                <div style="font-size:0.95rem; font-weight:600; color:#FF4B4B;">-${row['有效金额']:,.0f}</div>
             </div>
             """, unsafe_allow_html=True)
-            
-    # 4. Mobile Bottom Nav (Simulated via columns at bottom)
-    st.divider()
-    c1, c2, c3 = st.columns(3)
-    if c1.button("🏠 首页", key="mob_nav_home", use_container_width=True):
-        st.session_state["v2_page"] = "Dashboard"
-        st.rerun()
-    if c2.button("➕ 记一笔", key="mob_nav_add", use_container_width=True):
-         # Could open a dialog or switch to add page
-         with st.popover("记账", use_container_width=True):
-             st.write("快速记账")
-             # Simple form
-             with st.form("mob_quick_add"):
-                 item = st.text_input("项目")
-                 amt = st.number_input("金额", min_value=0.0)
-                 cat = st.selectbox("分类", CATEGORIES)
-                 if st.form_submit_button("提交"):
-                     services.add_expense(supabase, st.session_state["user"].id, pd.Timestamp.now(), item, amt, cat, "", "mobile")
-                     st.success("已记录")
-                     time.sleep(1)
-                     st.rerun()
-                     
-    if c3.button("🤖 助手", key="mob_nav_chat", use_container_width=True):
-        st.session_state["v2_page"] = "Smart Chat"
-        st.rerun()
 
-    # Handle Chat Page in Mobile separately if needed, but for now reuse simple
-    if st.session_state["v2_page"] == "Smart Chat":
-        render_chat(df, services, supabase, user)
+    # 7. Navigation (Floating Bar)
+    render_mobile_floating_bar()
 
 
 # ==========================================
@@ -1295,18 +1579,47 @@ def render(supabase):
     
     # Device Detection
     device_type = utils.get_device_type()
+    # device_type = "mobile" # Force mobile for testing CSS overrides
     
     if device_type == "mobile":
-        # Mobile View Entry
-        user = st.session_state.get("user")
-        if not user:
-            st.error("请先登录")
-            return
+        # Inject Mobile Specific CSS Overrides to compact the UI
+        st.markdown("""
+        <style>
+            /* Aggressive Mobile Reduction (~2/3 height) */
+            .bc-top { padding: 4px 16px !important; }
+            .bc-bottom { padding: 8px 16px !important; }
+            .track-container { height: 35px !important; margin-bottom: 4px !important; }
             
-        df = services.load_expenses(supabase)
-        render_mobile_dashboard(df, services, supabase, user)
-        return
-
+            /* Smaller Fonts & Icons */
+            .bc-icon-box { 
+                width: 42px !important; 
+                height: 42px !important; 
+                font-size: 1.2rem !important; 
+                border-radius: 12px !important;
+            }
+            .bc-cat-name { font-size: 1.1rem !important; }
+            .bc-amount-big { font-size: 1.4rem !important; }
+            .bc-amount-sub { font-size: 0.75rem !important; }
+            .timeline-row { margin-bottom: 6px !important; font-size: 0.7rem !important; }
+            .bc-advice { font-size: 0.7rem !important; margin-top: 8px !important; }
+            .budget-card-container { margin-bottom: 8px !important; }
+            
+            /* Section Headers */
+            h2, h3, .kpi-title { font-size: 1.1rem !important; }
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # Fallthrough to Desktop Logic but with is_mobile flag passed down
+        # Mobile View Entry (Legacy) -> Redirecting to Desktop View
+        pass
+        
+        # New Mobile View Entry
+        user = st.session_state.get("user")
+        if user:
+            df = services.load_expenses(supabase)
+            render_mobile_dashboard(df, services, supabase, user)
+            return
+        
     # Desktop View Entry (Original Logic)
     with st.sidebar:
         logo_url = "https://api.dicebear.com/9.x/bottts/svg?seed=FinanceHelper&backgroundColor=00a6ff"
@@ -1329,14 +1642,14 @@ def render(supabase):
     df = services.load_expenses(supabase)
     
     if page == "Dashboard":
-        render_desktop_dashboard(df, services, supabase)
+        render_desktop_dashboard(df, services, supabase, is_mobile=(device_type == "mobile"))
     elif page == "Transactions":
-        render_transactions(df, services, supabase)
+        render_transactions(df, services, supabase, is_mobile=(device_type == "mobile"))
     elif page == "Analysis":
-        render_analysis(df, services, supabase)
+        render_analysis(df, services, supabase, is_mobile=(device_type == "mobile"))
     elif page == "Budgets":
-        render_budgets(df, services, supabase, st.session_state["user"])
+        render_budgets(df, services, supabase, st.session_state["user"], is_mobile=(device_type == "mobile"))
     elif page == "Subscriptions":
-        render_subscriptions(df, services, supabase)
+        render_subscriptions(df, services, supabase, is_mobile=(device_type == "mobile"))
     elif page == "Smart Chat":
-        render_chat(df, services, supabase, st.session_state["user"])
+        render_chat(df, services, supabase, st.session_state["user"], is_mobile=(device_type == "mobile"))

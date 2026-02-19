@@ -1,5 +1,13 @@
 # Changelog
 
+## [V3.4] - 2026-02-19
+### Mobile UI Polish
+- **Unified Mobile Dashboard**: Consolidated KPI card, optimized layout for small screens.
+- **Floating Navigation**: Persistent, transparent bottom bar with glassmorphism effect for quick access to Dashboard/Chat.
+- **Compact Components**: Ultra-compact budget progress bars (12px), responsive heatmap adjustments to prevent overlap.
+- **Visual Enhancements**: Professional dark blue gradient for navigation buttons, cleaner charts (removed axis labels), larger pie chart.
+- **UX Improvements**: Auto-focus chat input on mobile, overlap prevention for better readability.
+
 ## [V3.3] - 2026-02-19
 ### Visual Overhaul
 - **Budget Cards Redesign**: Dual-color cards with professional dark blue header, thick progress bars (40px) with color warnings, and "Today" timeline indicator.
