@@ -1,5 +1,5 @@
 # GTPinput 💰
-**GPT 智能记账系统 V3.0**
+**GPT 智能记账系统 V3.4**
 
 这是一个由 GPT 驱动的个人记账全栈系统，支持自然语言记账、自动分类、实时汇总、自动周期扣款、月度预算管理，并通过 Streamlit 提供手机/电脑友好的可视化 Dashboard。
 
@@ -95,6 +95,18 @@
     - 全局统一的 KPI 标题样式 (Bold + Icon)。
     - 热力图 (Heatmap) 高度严格对齐，视觉更整洁。
 
+### 11. 📱 V3.4 移动端重构 (Mobile UI Polish)
+- **统一仪表盘 (Unified Dashboard)**:
+    - 针对手机竖屏优化的单页布局。
+    - **KPI 聚合**: 核心数据一目了然。
+    - **热力图适配**: 自适应宽度与间距，完美展示活跃度。
+- **悬浮导航条 (Floating Bar)**:
+    - 全局透明磨砂玻璃效果，随时唤起 AI 助手/返回首页。
+    - 职业深蓝渐变按钮，操作流畅。
+- **极致紧凑**:
+    - 12px 超薄预算条，不仅美观且节省屏幕空间。
+    - 自动聚焦输入框，提升单手操作效率。
+
 ---
 
 ## 🏗️ 整体架构
@@ -141,9 +153,15 @@ graph TD
 ## 📂 文件结构 (File Structure)
 
 ```text
-.
 ├── .streamlit/          # Streamlit 配置 (secrets.toml)
+├── assets/              # 静态资源 (Logo, Icons)
+├── config/              # 配置文件 (rules.py)
+├── docs/                # 项目文档
 ├── modules/             # Python 模块 (UI, Services, Auth)
+│   ├── auth.py          # 认证逻辑
+│   ├── services.py      # 数据库交互
+│   └── ui_v2.py         # 核心 UI 组件 & Mobile 适配
+├── scripts/             # 自动化脚本 (Cron Jobs)
 ├── supabase/            # Supabase 相关
 │   ├── functions/
 │   │   └── gpt-api/     # 核心 API (Deno/Typescript)
