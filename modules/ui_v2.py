@@ -391,8 +391,8 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
     display: flex; align-items: center; justify-content: center; 
     backdrop-filter: blur(4px);
 }
-.bc-amount-big { font-size: 0.9rem; font-weight: 700; display: inline-block; opacity: 0.9; }
-.bc-amount-sub { font-size: 1.2rem; font-weight: 700; display: inline-block; opacity: 1.0; }
+.bc-amount-big { font-size: 0.8rem; font-weight: 700; display: inline-block; opacity: 0.9; }
+.bc-amount-sub { font-size: 1.4rem; font-weight: 700; display: inline-block; opacity: 1.0; }
 """
                     
                     top_html = f"""
@@ -492,12 +492,12 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
         display: flex; justify-content: space-between;
         color: #666; font-size: 0.75rem; font-weight: 600;
         align-items: center;
-        margin-bottom: 12px;
+        margin-bottom: 15px;
     }}
     .track-container {{
         position: relative;
         height: 70px; /* Increased space for 40px bar */
-        margin-bottom: 8px;
+        margin-bottom: 0px;
         /* Removed flex to rely on absolute positioning */
     }}
     .track-bg {{
@@ -547,7 +547,7 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
     }}
     
     .bc-advice {{
-        text-align: center; color: #888; font-size: 0.8rem; margin-top: 12px;
+        text-align: center; color: #888; font-size: 0.8rem; margin-top: 15px;
     }}
 </style>
 """, unsafe_allow_html=True)
