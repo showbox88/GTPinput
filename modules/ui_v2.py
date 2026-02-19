@@ -236,6 +236,7 @@ def render_sidebar_nav():
         if sel in rev_options:
             st.session_state["v2_page"] = rev_options[sel]
     
+    
     st.radio(
         "Menu",
         list(NAV_OPTIONS.values()),
@@ -244,7 +245,20 @@ def render_sidebar_nav():
         key="v2_nav_radio",
         on_change=on_nav_change
     )
-    
+
+    # --- DEBUG SECTION ---
+    with st.sidebar.expander("🛠️ Debug Info", expanded=False):
+        user = st.session_state.get("user")
+        if user:
+            st.caption(f"User ID: `{user.id}`")
+            st.caption(f"Email: `{user.email}`")
+        else:
+            st.error("Not Logged In")
+        
+        if st.button("Clear Session & Reload"):
+            st.session_state.clear()
+            st.rerun()
+
     return st.session_state["v2_page"]
 
 def render_mobile_bottom_nav():
@@ -965,10 +979,16 @@ def render_chat(df, services, supabase, user):
                  ph = st.empty()
                  ph.write("Thinking...")
                  
-                 result = expense_chat.process_user_message(prompt, df)
+                 # Fetch Context for AI
+                 budgets = services.get_budgets(supabase)
+                 subs = services.get_recurring_rules(supabase)
+                 
+                 result = expense_chat.process_user_message(prompt, df, budgets, subs)
                  reply = "Completed."
                  
                  intent = result.get("type", "chat")
+                 
+                 # 1. RECORD
                  if intent == "record":
                      recs = result.get("records", []) or ([result] if "item" in result else [])
                      payloads = []
@@ -986,8 +1006,100 @@ def render_chat(df, services, supabase, user):
                          st.session_state["data_changed"] = True
                      else:
                          reply = "未识别到内容"
+
+                 # 2. CHAT
                  elif intent == "chat":
                      reply = result.get("reply", "...")
+
+                 # 3. DELETE EXPENSE
+                 elif intent == "delete":
+                     eid = result.get("id")
+                     if eid:
+                         services.delete_expense(supabase, eid)
+                         reply = result.get("reply", "已删除")
+                         st.session_state["data_changed"] = True
+                     else:
+                         reply = "未找到对应记录"
+
+                 # 4. UPDATE EXPENSE
+                 elif intent == "update":
+                     eid = result.get("id")
+                     updates = result.get("updates")
+                     if eid and updates:
+                         services.update_expense(supabase, eid, updates)
+                         reply = result.get("reply", "已更新")
+                         st.session_state["data_changed"] = True
+                     else:
+                         reply = "更新失败，缺少信息"
+
+                 # 5. ADD BUDGET
+                 elif intent == "budget_add":
+                     # category, amount
+                     cat = result.get("category")
+                     amt = result.get("amount")
+                     if cat and amt:
+                         # Check if budget exists for this category
+                         existing_budget = next((b for b in budgets if b["category"] == cat), None)
+                         
+                         if existing_budget:
+                             # Update existing
+                             services.update_budget(supabase, existing_budget["id"], {"amount": float(amt)})
+                             reply = f"已更新 {cat} 预算为 {amt} 元 (原为 {existing_budget['amount']} 元)"
+                         else:
+                             # Add new
+                             icon_map = {"餐饮":"🍔", "交通":"🚗", "日用品":"🛒", "服饰":"👔", "娱乐":"🎮", "医疗":"💊", "居住":"🏠", "其他":"📦"}
+                             icon = icon_map.get(cat, "💰")
+                             services.add_budget(supabase, user.id, f"{cat}预算", cat, amt, "#2F80ED", icon)
+                             reply = result.get("reply", f"已设置 {cat} 预算")
+                         
+                         st.session_state["data_changed"] = True
+                     else:
+                         reply = "设置预算失败，缺少分类或金额"
+
+                 # 6. DELETE BUDGET
+                 elif intent == "budget_delete":
+                     bid = result.get("id")
+                     if bid:
+                         services.delete_budget(supabase, bid)
+                         reply = result.get("reply", "已删除预算")
+                         st.session_state["data_changed"] = True
+                     else:
+                         reply = "未找到该预算"
+
+                 # 7. ADD RECURRING
+                 elif intent == "recurring_add":
+                     # name, amount, category, frequency, day
+                     try:
+                         # Default day calculation if not provided is hard in prompt, usually prompt gives start_date
+                         # We need to parse start_date to get day/weekday
+                         start_date_str = result.get("start_date")
+                         if start_date_str:
+                             s_date = pd.to_datetime(start_date_str)
+                         else:
+                             s_date = pd.Timestamp.now()
+                         
+                         services.add_recurring(
+                             supabase, user.id, 
+                             result.get("name"), 
+                             float(result.get("amount", 0)), 
+                             result.get("category", "其他"), 
+                             result.get("frequency", "Monthly"), 
+                             s_date
+                         )
+                         reply = result.get("reply", "已添加订阅")
+                         st.session_state["data_changed"] = True
+                     except Exception as e:
+                         reply = f"添加订阅失败: {e}"
+
+                 # 8. DELETE RECURRING
+                 elif intent == "recurring_delete":
+                     rid = result.get("id")
+                     if rid:
+                         services.delete_recurring(supabase, rid)
+                         reply = result.get("reply", "已删除订阅")
+                         st.session_state["data_changed"] = True
+                     else:
+                         reply = "未找到该订阅"
                  
                  ph.write(reply)
                  st.session_state.messages.append({"role": "assistant", "content": reply})

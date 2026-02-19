@@ -54,12 +54,21 @@ serve(async (req) => {
 
         // Helper to get the primary user ID (since we are in Service Role mode)
         // We assume this is a single-user app for now. 
-        // In a multi-user SaaS, we'd need to map GPT ID to User ID, but for personal use, this works.
+        // Improvement: Pick the user who signed in most recently.
         const { data: { users }, error: userError } = await supabaseClient.auth.admin.listUsers();
         if (userError || !users || users.length === 0) {
             return json({ error: "No users found in Supabase Auth. Please sign up at least one user." }, 500);
         }
-        const ownerId = users[0].id; // Use the first user as the owner
+
+        // Sort by last_sign_in_at desc
+        users.sort((a: any, b: any) => {
+            const tA = new Date(a.last_sign_in_at || 0).getTime();
+            const tB = new Date(b.last_sign_in_at || 0).getTime();
+            return tB - tA;
+        });
+
+        const ownerId = users[0].id; // Use the most active user
+        console.log(`Using user: ${users[0].email} (Last seen: ${users[0].last_sign_in_at})`);
 
         // --- 1. Root Check ---
         if (pathname === "/" || pathname === "/gpt-api") {
@@ -67,7 +76,9 @@ serve(async (req) => {
         }
 
         // --- 2. List Expenses ---
-        if (pathname.endsWith("/list")) {
+        // --- 2. List Expenses ---
+        // Fix: Ensure we don't accidentally catch /budget/list or /recurring/list
+        if (pathname.endsWith("/list") && !pathname.includes("/budget") && !pathname.includes("/recurring")) {
             const { data, error } = await supabaseClient
                 .from("expenses")
                 .select("*")
@@ -80,7 +91,8 @@ serve(async (req) => {
         }
 
         // --- 3. Add Expense (Text Parsing) ---
-        if (req.method === "POST" && pathname.endsWith("/add")) {
+        // Fix: Ensure we don't accidentally catch /budget/add or /recurring/add
+        if (req.method === "POST" && pathname.endsWith("/add") && !pathname.includes("/budget") && !pathname.includes("/recurring")) {
             const body = await req.json();
             const text = String(body.text || "").trim();
             const source = body.source || "gpt";
@@ -163,7 +175,7 @@ serve(async (req) => {
         }
 
         // --- 4. Update Expense ---
-        if (req.method === "POST" && pathname.endsWith("/update")) {
+        if (req.method === "POST" && pathname.endsWith("/update") && !pathname.includes("/budget") && !pathname.includes("/recurring")) {
             const body = await req.json();
             const { id, ...updates } = body;
             if (!id) return json({ detail: "id is required" }, 422);
@@ -178,7 +190,7 @@ serve(async (req) => {
         }
 
         // --- 5. Delete Expense ---
-        if (req.method === "POST" && pathname.endsWith("/delete")) {
+        if (req.method === "POST" && pathname.endsWith("/delete") && !pathname.includes("/budget") && !pathname.includes("/recurring")) {
             const body = await req.json();
             if (!body.id) return json({ detail: "id is required" }, 422);
 
@@ -191,17 +203,44 @@ serve(async (req) => {
             return json({ ok: true });
         }
 
-        // --- 6. Budget & Recurring (Simple CRUD) ---
-        // Budget
+        // --- 6. Budget (Upsert) ---
         if (pathname.endsWith("/budget/list")) {
-            const { data, error } = await supabaseClient.from("budgets").select("*");
+            const { data, error } = await supabaseClient.from("budgets").select("*").eq("user_id", ownerId);
             if (error) throw error;
-            return json({ ok: true, rows: data });
+            return json({
+                ok: true,
+                rows: data,
+                _debug_user_email: users[0].email,
+                _debug_user_id: ownerId,
+                _debug_candidates: users.slice(0, 3).map((u: any) => ({ email: u.email, last_seen: u.last_sign_in_at }))
+            });
         }
         if (req.method === "POST" && pathname.endsWith("/budget/add")) {
             const body = await req.json();
-            const { error } = await supabaseClient.from("budgets").insert(body);
-            if (error) throw error;
+            const { category, amount, name, icon } = body;
+
+            // Check existing
+            const { data: existing } = await supabaseClient
+                .from("budgets")
+                .select("id")
+                .eq("user_id", ownerId)
+                .eq("category", category)
+                .maybeSingle();
+
+            if (existing) {
+                // Update
+                const { error } = await supabaseClient
+                    .from("budgets")
+                    .update({ amount, name, icon })
+                    .eq("id", existing.id);
+                if (error) throw error;
+            } else {
+                // Insert
+                const { error } = await supabaseClient
+                    .from("budgets")
+                    .insert({ ...body, user_id: ownerId }); // Ensure user_id
+                if (error) throw error;
+            }
             return json({ ok: true });
         }
         if (req.method === "POST" && pathname.endsWith("/budget/delete")) {
@@ -211,13 +250,63 @@ serve(async (req) => {
             return json({ ok: true });
         }
 
-        // Recurring
+        // --- 7. Recurring (Subscriptions) ---
         if (pathname.endsWith("/recurring/list")) {
-            const { data, error } = await supabaseClient.from("recurring_rules").select("*").eq("active", true);
+            const { data, error } = await supabaseClient
+                .from("recurring_rules")
+                .select("*")
+                .eq("user_id", ownerId)
+                .eq("active", true);
             if (error) throw error;
             return json({ ok: true, rows: data });
         }
-        // ... Implement other recurring routes similarly if needed for full parity
+        if (req.method === "POST" && pathname.endsWith("/recurring/add")) {
+            const body = await req.json();
+            // Expected body: { name, amount, category, frequency, start_date }
+            // Derived: day (from start_date)
+            // Default frequency: Monthly
+            const freq = body.frequency || "Monthly";
+            let day = 1;
+
+            if (body.start_date) {
+                const d = new Date(body.start_date);
+                if (!isNaN(d.getTime())) {
+                    if (freq === "Weekly") {
+                        // 0=Mon, 6=Sun in Python version? Javascript getDay() 0=Sun. 
+                        // Let's match Python version standard if possible or just use day of month
+                        // Python weekday(): Mon=0. JS getDay(): Sun=0, Mon=1.
+                        // Let's store JS getDay() for simplicity in Edge Function or convert?
+                        // The internal app uses: day_val = start_date.weekday() (0=Mon).
+                        // Let's try to align.
+                        const jsDay = d.getDay(); // 0=Sun, 1=Mon...
+                        day = (jsDay + 6) % 7; // Convert to 0=Mon, 6=Sun
+                    } else {
+                        day = d.getDate();
+                    }
+                }
+            }
+
+            const payload = {
+                user_id: ownerId,
+                name: body.name,
+                amount: body.amount,
+                category: body.category || "其他",
+                frequency: freq,
+                day: day,
+                active: true,
+                // created_at auto handled
+            };
+
+            const { error } = await supabaseClient.from("recurring_rules").insert(payload);
+            if (error) throw error;
+            return json({ ok: true });
+        }
+        if (req.method === "POST" && pathname.endsWith("/recurring/delete")) {
+            const body = await req.json();
+            const { error } = await supabaseClient.from("recurring_rules").delete().eq("id", body.id);
+            if (error) throw error;
+            return json({ ok: true });
+        }
 
         return json({ error: "Not Found" }, 404);
 

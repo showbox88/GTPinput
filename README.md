@@ -101,10 +101,9 @@
 
 ```mermaid
 graph TD
-    User(用户/GPT) -->|语音/文字| API(Cloudflare Worker)
-    Cron(Cron Trigger) -->|每日触发| API
+    User(用户/GPT) -->|语音/文字| API(Supabase Edge Function)
     
-    API -->|SQL| DB[(Cloudflare D1 SQLite)]
+    API -->|SQL| DB[(Supabase Database)]
     
     Streamlit(Streamlit Dashboard) -->|GET /list| API
     Streamlit -->|POST /update| API
@@ -115,9 +114,9 @@ graph TD
 
 ---
 
-## 🛠️ API 接口 (Cloudflare Worker)
+## 🛠️ API 接口 (Supabase Edge Function)
 
-所有操作均需 `X-API-Key` 鉴权。
+所有操作均需通过 Supabase Functions 调用。Custom GPT无需鉴权（已配置 `--no-verify-jwt`）。
 
 ### 核心记账
 | 方法 | 路径 | 描述 |
@@ -135,7 +134,7 @@ graph TD
 | `POST` | `/budget/delete` | 删除预算 |
 | `GET` | `/recurring/list` | 获取固定规则列表 |
 | `POST` | `/recurring/add` | 新增规则 |
-| `GET` | `/recurring/check` | 手动触发规则检查 |
+| `POST` | `/recurring/delete` | 删除规则 |
 
 ---
 
@@ -143,19 +142,15 @@ graph TD
 
 ```text
 .
-├── .streamlit/          # Streamlit 配置 (secrets.toml, config.toml)
-├── config/              # 配置文件 (rules.py, settings.json)
-├── docs/                # 项目文档 (tasks, plans)
-├── supabase/            # Supabase 相关 (Edge Functions)
-│   └── functions/
-│       └── gpt-api/     # 核心 API (Cloudflare Worker/Supabase Edge Function)
-├── scripts/             # 自动化脚本
-│   └── cron_job.py      # 固定支出检查脚本 (GitHub Action)
-├── .github/workflows/   # GitHub Actions 配置
-│   └── daily_check.yml  # 定时任务工作流
+├── .streamlit/          # Streamlit 配置 (secrets.toml)
+├── modules/             # Python 模块 (UI, Services, Auth)
+├── supabase/            # Supabase 相关
+│   ├── functions/
+│   │   └── gpt-api/     # 核心 API (Deno/Typescript)
+│   └── config.toml      # Supabase 配置
 ├── app.py               # Streamlit 主程序 (Frontend)
 ├── expense_chat.py      # 本地对话逻辑处理
-├── openapi_supabase.json # OpenAI Actions 定义
+├── openapi_supabase.json # Custom GPT Action Schema
 ├── requirements.txt     # Python 依赖
 └── supabase_setup.sql   # 数据库初始化脚本
 ```
@@ -164,29 +159,27 @@ graph TD
 
 ## 🖥️ 部署指南
 
-### 1. Supabase / Cloudflare Worker (后端)
-需要绑定 D1 数据库 (`expense_db`) 和设置 `APP_API_KEY` / `OPENAPI_API_KEY` 环境变量。
+### 1. Supabase Edge Function (后端 API)
+这是连接 Custom GPT 和数据库的核心桥梁。
 
-**关键配置 (wrangler.toml / supabase/config.toml)**:
-```toml
-[[d1_databases]]
-binding = "expense_db"
-database_name = "expense-db"
-database_id = "your-id"
+**前提条件**:
+- 安装 Supabase CLI / Node.js
+- 登录: `npx supabase login`
 
-[triggers]
-crons = ["0 0 * * *"] # 每天午夜触发
-
-### 2. GitHub Actions (自动扣款)
-项目包含 `Daily Recurring Check` 工作流，每天自动检查固定支出。
-**配置要求**: 在 GitHub Repository Secrets 中添加:
-- `SUPABASE_URL`: 你的 Supabase URL
-- `SUPABASE_KEY`: 你的 Supabase **Service Role** Key (这是必要的，因为自动化脚本需要绕过 RLS 检查所有用户的规则)
+**部署命令**:
+```bash
+npx supabase functions deploy gpt-api --no-verify-jwt
 ```
+> 注意: `--no-verify-jwt` 是必须的，因为 Custom GPT 不会发送 Supabase 的 Auth Token。我们通过代码中的逻辑自动关联活跃用户。
 
-### 2. Streamlit Dashboard (前端)
-本地运行或部署到 Streamlit Cloud。
+### 2. Custom GPT 配置
+1. 创建一个新的 GPT。
+2. 在 **Actions** 中，导入 `openapi_supabase.json` 的内容。
+3. **Authentication**: 选择 `None` (无需鉴权)。
+4. Enjoy! 🎉
 
+### 3. Streamlit Dashboard (前端 App)
+本地运行:
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
@@ -197,10 +190,6 @@ streamlit run app.py
 [supabase]
 url = "YOUR_SUPABASE_URL"
 key = "YOUR_SUPABASE_ANON_KEY"
-
-[general]
-API_URL = "https://your-worker.workers.dev" # (可选: 如果使用独立 Worker)
-API_KEY = "your-key"
 ```
 
 ---
@@ -208,6 +197,7 @@ API_KEY = "your-key"
 ## 📝 待办计划 (Roadmap)
 - [x] **V3.0**: 月度预算管理 (Monthly Budgets)
 - [x] **V3.0**: 自动周期扣款 (Recurring Expenses)
+- [x] **V3.3**: GPT 深度集成 (增删改查全支持)
+- [x] **Fix**: 多设备/多账号数据同步问题
 - [ ] 多账户/多币种支持
-- [x] 导出 Excel/CSV 报表 (已支持 CSV 导出)
 - [ ] 年度消费深度分析报告

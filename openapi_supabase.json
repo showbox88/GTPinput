@@ -184,6 +184,48 @@
                     }
                 }
             }
+        },
+        "/recurring/add": {
+            "post": {
+                "operationId": "addRecurring",
+                "summary": "Add a recurring expense (subscription)",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AddRecurringRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Recurring rule added"
+                    }
+                }
+            }
+        },
+        "/recurring/delete": {
+            "post": {
+                "operationId": "deleteRecurring",
+                "summary": "Delete a recurring expense",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeleteRecurringRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Recurring rule deleted"
+                    }
+                }
+            }
         }
     },
     "components": {
@@ -458,19 +500,50 @@
                         }
                     }
                 }
-            }
-        },
-        "securitySchemes": {
-            "bearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT"
+            },
+            "AddRecurringRequest": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "amount": {
+                        "type": "number"
+                    },
+                    "category": {
+                        "type": "string"
+                    },
+                    "frequency": {
+                        "type": "string",
+                        "enum": [
+                            "Monthly",
+                            "Weekly",
+                            "Yearly"
+                        ],
+                        "default": "Monthly"
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "format": "date",
+                        "description": "YYYY-MM-DD"
+                    }
+                },
+                "required": [
+                    "name",
+                    "amount"
+                ]
+            },
+            "DeleteRecurringRequest": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "id"
+                ]
             }
         }
-    },
-    "security": [
-        {
-            "bearerAuth": []
-        }
-    ]
+    }
 }

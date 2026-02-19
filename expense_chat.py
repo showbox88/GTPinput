@@ -23,90 +23,118 @@ def get_openai_client():
 
 SYSTEM_PROMPT = """
 You are an intelligent financial assistant for 'GTPinput'.
-Your goal is to help the user manage expenses via natural language.
+Your goal is to help the user manage expenses, budgets, and subscriptions via natural language.
 
 **CRITICAL INSTRUCTION**: You must **ALWAYS** reply in **Simplified Chinese (简体中文)**.
 
 **Context Data**:
-You have access to the user's recent expense records (provided below as JSON).
-Use this data to answer questions or identify records to delete.
+You have access to:
+1. Recent Expenses (JSON)
+2. Current Budgets (JSON)
+3. Active Subscriptions (JSON)
 
 **Intents & Output Formats**:
 
-**Intents & Output Formats**:
-
-1. **RECORD Expense** (User says "Lunch 20, Taxi 50", "买菜 30 和 水果 20"):
-   - **Rule**: If the user provides multiple items, output ALL of them in the "records" array.
-   - **Categorization**: You MUST classify into one of these EXACT values: ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "居住", "其他"].
+1. **RECORD Expense** (User says "Lunch 20", "买菜 30"):
+   - Classify into: ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "居住", "其他"].
    - Output JSON: 
      ```json
      { 
        "type": "record", 
        "records": [
-         { "item": "Lunch", "amount": 20, "category": "餐饮", "date": "YYYY-MM-DD", "note": "..." },
-         { "item": "Taxi", "amount": 50, "category": "交通", "date": "YYYY-MM-DD", "note": "..." }
+         { "item": "Lunch", "amount": 20, "category": "餐饮", "date": "YYYY-MM-DD", "note": "..." }
        ]
      }
      ```
 
-2. **QUERY / ANSWER** (User says "Total spent on food?", "Last time I bought milk?"):
-   - Analyze the provided Context Data.
-   - Answer the user's question directly in PLAIN TEXT (friendly tone, Chinese).
-   - Output JSON (wrapper):
-     ```json
-     { "type": "chat", "reply": "你在吃饭上花了 50 元..." }
-     ```
+2. **QUERY / ANSWER** (User says "Total spent?", "How many subscriptions?"):
+   - Answer directly in PLAIN TEXT.
+   - Output JSON: `{ "type": "chat", "reply": "..." }`
 
-3. **DELETE Expense** (User says "Delete the last taxi record", "Remove the 50 yuan expense"):
-   - Find the single most likely matching record ID from the Context Data.
+3. **DELETE Expense** (User says "Delete the last taxi record"):
+   - Output JSON: `{ "type": "delete", "id": 12345, "reply": "..." }`
+
+4. **UPDATE Expense** (User says "Change 30 yuan one to 40"):
+   - Output JSON: `{ "type": "update", "id": 12345, "updates": { "amount": 40 }, "reply": "..." }`
+
+5. **ADD BUDGET** (User says "Set dining budget to 2000", "Budget for Transport 500"):
+   - Classify category strictly.
    - Output JSON:
      ```json
-     { "type": "delete", "id": 12345, "reply": "已为你删除出租车费..." }
-     ```
-
-4. **UPDATE / MODIFY Expense** (User says "Change the 30 yuan one to 40", "Rename lunch to dinner"):
-   - Find the matching record ID from Context Data.
-   - Output JSON with "updates" object containing ONLY the changed fields.
-   - Output JSON:
-     ```json
-     { 
-       "type": "update", 
-       "id": 12345, 
-       "updates": { "amount": 40 }, 
-       "reply": "已将金额修改为 40..." 
+     {
+       "type": "budget_add",
+       "category": "餐饮",
+       "amount": 2000,
+       "reply": "已为您设置餐饮预算 2000 元。"
      }
      ```
 
+6. **DELETE BUDGET** (User says "Remove dining budget"):
+   - Find ID from Current Budgets.
+   - Output JSON: `{ "type": "budget_delete", "id": 123, "reply": "..." }`
+
+7. **ADD SUBSCRIPTION** (User says "Netflix monthly 15 dollars", "Gym weekly 200"):
+   - Fields: `name`, `amount`, `category`, `frequency` (Monthly/Weekly/Yearly), `start_date` (YYYY-MM-DD, default today).
+   - Output JSON:
+     ```json
+     {
+       "type": "recurring_add",
+       "name": "Netflix",
+       "amount": 15,
+       "category": "娱乐",
+       "frequency": "Monthly",
+       "start_date": "2023-10-01",
+       "reply": "已添加 Netflix 月付订阅。"
+     }
+     ```
+
+8. **DELETE SUBSCRIPTION** (User says "Cancel Netflix sub"):
+   - Find ID from Active Subscriptions.
+   - Output JSON: `{ "type": "recurring_delete", "id": 456, "reply": "..." }`
+
 **Current Date**: %TODAY%
 
-**Context Data (Recent 50 records)**:
-%DATA_CONTEXT%
+**Context Data**:
+Expenses (Top 50): %DATA_EXPENSES%
+Budgets: %DATA_BUDGETS%
+Subscriptions: %DATA_SUBS%
 """
 
-def process_user_message(user_text, df):
+def process_user_message(user_text, df, budgets=None, recurring=None):
     """
-    Process text input with Dataframe context.
-    df: Pandas DataFrame containing ['id', 'date', 'item', 'amount', 'category', 'note']
+    Process text input with full context.
     """
     client = get_openai_client()
     if not client:
         return {"type": "chat", "reply": "⚠️ OpenAI API Key missing."}
 
-    # Prepare Data Context (Last 50 rows to save tokens)
-    # Convert df to JSON string (records orientation)
-    # Ensure df has standard columns
-    context_str = "[]"
+    # 1. Expenses Context
+    context_exp = "[]"
     if not df.empty:
-        # Sort by date/id desc just in case
         df_sorted = df.sort_values(by="id", ascending=False).head(50)
-        # Convert to simple list of dicts
-        # Keep only relevant cols for context
         safe_cols = [c for c in ["id", "date", "item", "amount", "category", "note"] if c in df_sorted.columns]
-        data_records = df_sorted[safe_cols].to_dict(orient="records")
-        context_str = json.dumps(data_records, ensure_ascii=False)
+        context_exp = json.dumps(df_sorted[safe_cols].to_dict(orient="records"), ensure_ascii=False)
+
+    # 2. Budgets Context
+    context_bud = "[]"
+    if budgets:
+        # Simplify for specific matching
+        b_simple = [{"id": b["id"], "category": b["category"], "amount": b["amount"]} for b in budgets]
+        context_bud = json.dumps(b_simple, ensure_ascii=False)
+
+    # 3. Recurring Context
+    context_sub = "[]"
+    if recurring:
+        r_simple = [{"id": r["id"], "name": r["name"], "amount": r["amount"], "frequency": r["frequency"]} for r in recurring]
+        context_sub = json.dumps(r_simple, ensure_ascii=False)
 
     today_str = datetime.date.today().strftime("%Y-%m-%d")
-    prompt = SYSTEM_PROMPT.replace("%TODAY%", today_str).replace("%DATA_CONTEXT%", context_str)
+    
+    prompt = SYSTEM_PROMPT \
+        .replace("%TODAY%", today_str) \
+        .replace("%DATA_EXPENSES%", context_exp) \
+        .replace("%DATA_BUDGETS%", context_bud) \
+        .replace("%DATA_SUBS%", context_sub)
 
     try:
         response = client.chat.completions.create(
@@ -130,7 +158,6 @@ def process_user_message(user_text, df):
             data = json.loads(json_str)
             return data
         except json.JSONDecodeError:
-            # If valid JSON parsing fails, treat as normal chat
             return {"type": "chat", "reply": content}
 
     except Exception as e:
