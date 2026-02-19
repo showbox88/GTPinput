@@ -1,5 +1,12 @@
 # Changelog
 
+## [V3.5] - 2026-02-19
+### Professional UI & Robust Rendering
+- **Unified KPI Card V3**: Aesthetic redesign featuring glassmorphism, bold hero typography, and text gradients for a professional financial look.
+- **Improved HTML Rendering**: Fixed a critical bug where indentation in HTML strings caused Streamlit to render raw code blocks instead of the intended UI.
+- **Adaptive Spacing**: Optimized vertical padding on mobile budget cards to improve visual hierarchy and readability.
+- **Structural Separation**: Isolated mobile and desktop budget card rendering logic to ensure cross-platform stability.
+
 ## [V3.4] - 2026-02-19
 ### Mobile UI Polish
 - **Unified Mobile Dashboard**: Consolidated KPI card, optimized layout for small screens.

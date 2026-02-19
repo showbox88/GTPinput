@@ -314,7 +314,7 @@ def navigate_to(page_key):
     else:
         st.session_state["v2_nav_radio"] = None
 
-def render_budget_cards(df, services, supabase):
+def render_budget_cards(df, services, supabase, is_mobile=False):
     budgets = services.get_budgets(supabase)
     tz = pytz.timezone("Asia/Shanghai")
     now = pd.Timestamp.now(tz=tz)
@@ -378,132 +378,182 @@ def render_budget_cards(df, services, supabase):
                 
                 icon = icon_map.get(b["category"], "💰")
                 
-                st.markdown(f"""
-                <style>
-                    .budget-card-container {{
-                        border-radius: 24px;
-                        overflow: hidden;
-                        margin-bottom: 16px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-                        font-family: 'Inter', sans-serif;
-                    }}
-                    .bc-top {{
-                        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%); /* Professional Dark Blue Fixed */
-                        padding: 10px 24px; /* Reduced vertical padding further */
-                        color: white;
-                        position: relative;
-                    }}
+                # --- RESPONSIVE STYLE & HTML GENERATION ---
+                if is_mobile:
+                    # Mobile: Icon Left, Text Right, Compact Fonts, Extra Padding
+                    padding_top = "40px"
                     
-                    .bc-cat-row {{ display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }}
-                    .bc-cat-name {{ font-size: 1.4rem; font-weight: 700; opacity: 0.95; }}
-                    .bc-icon-box {{ 
-                        background: rgba(255,255,255,0.15); 
-                        width: 60px; height: 60px; border-radius: 18px; 
-                        display: flex; align-items: center; justify-content: center; 
-                        backdrop-filter: blur(4px);
-                    }}
-                    .bc-amount-big {{ font-size: 1.8rem; font-weight: 800; line-height: 1.1; }}
-                    .bc-amount-sub {{ font-size: 0.9rem; opacity: 0.8; font-weight: 500; }}
+                    style_css = """
+.bc-cat-row { display: flex; justify-content: flex-start; align-items: center; gap: 12px; margin-bottom: 4px; }
+.bc-icon-box { 
+    background: rgba(255,255,255,0.15); 
+    width: 48px; height: 48px; border-radius: 14px; 
+    display: flex; align-items: center; justify-content: center; 
+    backdrop-filter: blur(4px);
+}
+.bc-amount-big { font-size: 0.9rem; font-weight: 700; display: inline-block; opacity: 0.9; }
+.bc-amount-sub { font-size: 1.2rem; font-weight: 700; display: inline-block; opacity: 1.0; }
+"""
                     
-                    .bc-bottom {{
-                        background: #181818;
-                        padding: 20px 24px;
-                        border-top: 1px solid rgba(255,255,255,0.05);
-                    }}
-                    .timeline-row {{
-                        display: flex; justify-content: space-between;
-                        color: #666; font-size: 0.75rem; font-weight: 600;
-                        align-items: center;
-                        margin-bottom: 12px;
-                    }}
-                    .track-container {{
-                        position: relative;
-                        height: 70px; /* Increased space for 40px bar */
-                        margin-bottom: 8px;
-                        /* Removed flex to rely on absolute positioning */
-                    }}
-                    .track-bg {{
-                        position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
-                        height: 40px; background: #333; border-radius: 20px; /* 40px thick */
-                    }}
-                    .track-fill {{
-                        position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-                        height: 40px; border-radius: 20px; /* 40px thick */
-                        /* width and background moved to inline style */
-                        box-shadow: 0 0 10px rgba(0,0,0,0.3);
-                        transition: width 0.5s ease;
-                        z-index: 1;
-                    }}
-                    .marker-today {{
-                        position: absolute; top: 0; 
-                        /* left moved to inline style */
-                        transform: translateX(-50%);
-                        display: flex; flex-direction: column; align-items: center;
-                        z-index: 2;
-                        height: 50%; /* End at the vertical center (middle of the bar) */
-                        pointer-events: none;
-                    }}
-                    .marker-bubble {{
-                        background: #fff; color: #000;
-                        padding: 2px 6px; border-radius: 6px;
-                        font-size: 0.65rem; font-weight: 800;
-                        margin-bottom: 2px;
-                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-                        line-height: 1;
-                    }}
-                    .marker-line {{
-                        width: 2px; background: #fff; opacity: 0.8;
-                        flex-grow: 1; /* Stretch to fill the 50% height */
-                    }}
+                    top_html = f"""
+<div class="bc-top">
+<div class="bc-cat-row">
+<div class="bc-icon-box" style="font-size: 1.5rem;">{icon}</div>
+<div class="bc-cat-name">{b['category']}</div>
+</div>
+<div style="text-align: right; margin-top: 4px;">
+<span class="bc-amount-big">${left:,.0f}</span>
+<span class="bc-amount-sub"> left of ${limit:,.0f}</span>
+</div>
+</div>
+"""
+                else:
+                    # Desktop: Icon Right, Text Left, Big Fonts, Standard Padding
+                    padding_top = "20px"
                     
-                    .track-text-overlay {{
-                        position: absolute; left: 50%; top: 50%; 
-                        transform: translate(-50%, -50%);
-                        color: #fff;
-                        font-weight: 800;
-                        font-size: 0.9rem;
-                        z-index: 3;
-                        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-                        pointer-events: none;
-                        white-space: nowrap;
-                    }}
+                    style_css = """
+.bc-cat-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; }
+.bc-icon-box { 
+    background: rgba(255,255,255,0.15); 
+    width: 60px; height: 60px; border-radius: 18px; 
+    display: flex; align-items: center; justify-content: center; 
+    backdrop-filter: blur(4px);
+}
+.bc-amount-big { font-size: 1.8rem; font-weight: 800; line-height: 1.1; }
+.bc-amount-sub { font-size: 0.9rem; opacity: 0.8; font-weight: 500; }
+"""
                     
-                    .bc-advice {{
-                        text-align: center; color: #888; font-size: 0.8rem; margin-top: 12px;
-                    }}
-                </style>
+                    top_html = f"""
+<div class="bc-top">
+<div class="bc-cat-row">
+<div class="bc-cat-name">{b['category']}</div>
+<div class="bc-icon-box" style="font-size: 1.8rem;">{icon}</div>
+</div>
+<div class="bc-amount-big">${left:,.0f}</div>
+<div class="bc-amount-sub">left of ${limit:,.0f}</div>
+</div>
+"""
+
+                # Final HTML construction (No indentation to prevent code block rendering)
+                card_html = f"""
+<div class="budget-card-container">
+{top_html}
+<div class="bc-bottom">
+<div class="timeline-row">
+<span>{start_str}</span>
+<!-- Percentage moved to progress bar -->
+<span>{end_str}</span>
+</div>
+<div class="track-container">
+<div class="track-bg"></div>
+<div class="track-fill" style="width: {pct_clamped}%; background: {bar_color};">
+<div class="track-text-overlay">{int(pct_clamped)}%</div>
+</div>
+<div class="marker-today" style="left: {time_pct}%;">
+<div class="marker-bubble">Today</div>
+<div class="marker-line"></div>
+</div>
+</div>
+<div class="bc-advice">
+{advice_text}
+</div>
+</div>
+</div>
+"""
                 
-                <div class="budget-card-container">
-                    <div class="bc-top">
-                        <div class="bc-cat-row">
-                            <div class="bc-cat-name">{b['category']}</div>
-                            <div class="bc-icon-box" style="font-size: 1.8rem;">{icon}</div>
-                        </div>
-                        <div class="bc-amount-big">${left:,.0f}</div>
-                        <div class="bc-amount-sub">left of ${limit:,.0f}</div>
-                    </div>
-                    <div class="bc-bottom">
-                        <div class="timeline-row">
-                            <span>{start_str}</span>
-                            <!-- Percentage moved to progress bar -->
-                            <span>{end_str}</span>
-                        </div>
-                        <div class="track-container">
-                            <div class="track-bg"></div>
-                            <div class="track-fill" style="width: {pct_clamped}%; background: {bar_color};">
-                                <div class="track-text-overlay">{int(pct_clamped)}%</div>
-                            </div>
-                            <div class="marker-today" style="left: {time_pct}%;">
-                                <div class="marker-bubble">Today</div>
-                                <div class="marker-line"></div>
-                            </div>
-                        </div>
-                        <div class="bc-advice">
-                            {advice_text}
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+                # Render Style
+                st.markdown(f"""
+<style>
+    .budget-card-container {{
+        border-radius: 24px;
+        overflow: hidden;
+        margin-bottom: 16px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        font-family: 'Inter', sans-serif;
+    }}
+    .bc-top {{
+        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+        padding: 10px 24px;
+        color: white;
+        position: relative;
+    }}
+    
+    .bc-cat-name {{ font-size: 1.4rem; font-weight: 700; opacity: 0.95; }}
+
+    /* Injected Dynamic Styles */
+    {style_css}
+    
+    .bc-bottom {{
+        background: #181818;
+        padding: {padding_top} 24px 20px 24px;
+        border-top: 1px solid rgba(255,255,255,0.05);
+    }}
+    .timeline-row {{
+        display: flex; justify-content: space-between;
+        color: #666; font-size: 0.75rem; font-weight: 600;
+        align-items: center;
+        margin-bottom: 12px;
+    }}
+    .track-container {{
+        position: relative;
+        height: 70px; /* Increased space for 40px bar */
+        margin-bottom: 8px;
+        /* Removed flex to rely on absolute positioning */
+    }}
+    .track-bg {{
+        position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+        height: 40px; background: #333; border-radius: 20px; /* 40px thick */
+    }}
+    .track-fill {{
+        position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+        height: 40px; border-radius: 20px; /* 40px thick */
+        /* width and background moved to inline style */
+        box-shadow: 0 0 10px rgba(0,0,0,0.3);
+        transition: width 0.5s ease;
+        z-index: 1;
+    }}
+    .marker-today {{
+        position: absolute; top: 0; 
+        /* left moved to inline style */
+        transform: translateX(-50%);
+        display: flex; flex-direction: column; align-items: center;
+        z-index: 2;
+        height: 50%; /* End at the vertical center (middle of the bar) */
+        pointer-events: none;
+    }}
+    .marker-bubble {{
+        background: #fff; color: #000;
+        padding: 2px 6px; border-radius: 6px;
+        font-size: 0.65rem; font-weight: 800;
+        margin-bottom: 2px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        line-height: 1;
+    }}
+    .marker-line {{
+        width: 2px; background: #fff; opacity: 0.8;
+        flex-grow: 1; /* Stretch to fill the 50% height */
+    }}
+    
+    .track-text-overlay {{
+        position: absolute; left: 50%; top: 50%; 
+        transform: translate(-50%, -50%);
+        color: #fff;
+        font-weight: 800;
+        font-size: 0.9rem;
+        z-index: 3;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+        pointer-events: none;
+        white-space: nowrap;
+    }}
+    
+    .bc-advice {{
+        text-align: center; color: #888; font-size: 0.8rem; margin-top: 12px;
+    }}
+</style>
+""", unsafe_allow_html=True)
+                
+                # Render HTML Structure using st.markdown with unsafe_allow_html=True but strictly NO indentation
+                st.markdown(card_html, unsafe_allow_html=True)
     else:
         st.info("暂无预算配置 (No Budgets Set)")
 
@@ -611,16 +661,16 @@ def render_heatmap(supabase, is_mobile=False):
     for i in range(days_to_show):
         d = start_date + datetime.timedelta(days=i)
         d_str = d.strftime("%Y-%m-%d")
-        count = data.get(d_str, 0)
+        amount = data.get(d_str, 0)
         
-        # Color scale
-        if count == 0: color = "#2d333b"
-        elif count <= 2: color = "#0e4429"
-        elif count <= 5: color = "#006d32"
-        elif count <= 10: color = "#26a641"
+        # Color scale (Money based)
+        if amount == 0: color = "#2d333b"
+        elif amount <= 50: color = "#0e4429"
+        elif amount <= 200: color = "#006d32"
+        elif amount <= 500: color = "#26a641"
         else: color = "#39d353"
         
-        cells.append(f'<div class="heatmap-cell" style="background-color:{color};" title="{d_str}: {count}"></div>')
+        cells.append(f'<div class="heatmap-cell" style="background-color:{color};" title="{d_str}: ¥{amount:,.0f}"></div>')
         
         # Track months for labels
         m = d.strftime("%b")
@@ -1304,45 +1354,48 @@ def render_unified_kpi_card(df, services, supabase):
     subs = services.get_recurring_rules(supabase)
     active_subs = len(subs)
 
-    st.markdown(f"""
-    <style>
-    .uni-card {{
-        background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
-        border-radius: 20px;
-        padding: 24px;
-        color: white;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 15px rgba(47, 128, 237, 0.4);
-    }}
-    .uni-label {{ font-size: 0.9rem; opacity: 0.9; font-weight: 500; margin-bottom: 5px; }}
-    .uni-value-big {{ font-size: 2.2rem; font-weight: 800; line-height: 1.1; }}
+    left_color = "#6FCF97" if left > 0 else "#EB5757"
     
-    .uni-divider {{ height: 1px; background: rgba(255,255,255,0.2); margin: 15px 0; }}
-    
-    .uni-bottom {{ display: flex; justify-content: space-between; }}
-    .uni-stat {{ display: flex; flex-direction: column; }}
-    .uni-label-sm {{ font-size: 0.75rem; opacity: 0.8; }}
-    .uni-value-sm {{ font-size: 1.2rem; font-weight: 700; }}
-    </style>
-    
-    <div class="uni-card">
-        <div>
-            <div class="uni-label">本月支出 (Month Spend)</div>
-            <div class="uni-value-big">${month_total:,.2f}</div>
-        </div>
-        <div class="uni-divider"></div>
-        <div class="uni-bottom">
-            <div class="uni-stat">
-                <div class="uni-label-sm">剩余预算 (Remaining)</div>
-                <div class="uni-value-sm">${left:,.2f}</div>
-            </div>
-            <div class="uni-stat" style="align-items: flex-end;">
-                <div class="uni-label-sm">活跃订阅 (Subs)</div>
-                <div class="uni-value-sm">{active_subs}</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    kpi_html = f"""<style>
+.uni-card-v3 {{
+background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
+border-radius: 28px;
+padding: 24px;
+color: white;
+margin-bottom: 24px;
+box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+border: 1px solid rgba(255,255,255,0.08);
+font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}}
+.uni-hero {{ margin-bottom: 20px; text-align: left; }}
+.uni-hero-label {{ font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px; opacity: 0.7; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }}
+.uni-hero-value {{ font-size: 3rem; font-weight: 900; letter-spacing: -1.5px; line-height: 1; background: linear-gradient(to bottom, #ffffff, #e0e0e0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+.uni-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
+.uni-sub-card {{ background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); padding: 16px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.1); }}
+.uni-sub-label {{ font-size: 0.7rem; font-weight: 600; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }}
+.uni-sub-value {{ font-size: 1.4rem; font-weight: 700; }}
+.text-red {{ color: #EB5757 !important; }}
+.text-green {{ color: #6FCF97 !important; }}
+.text-blue {{ color: #56CCF2 !important; }}
+.icon-box {{ width: 32px; height: 32px; background: rgba(255,255,255,0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }}
+</style>
+<div class="uni-card-v3">
+<div class="uni-hero">
+<div class="uni-hero-label"><div class="icon-box">💸</div>本月累计支出</div>
+<div class="uni-hero-value">${month_total:,.0f}</div>
+</div>
+<div class="uni-grid">
+<div class="uni-sub-card">
+<div class="uni-sub-label"><span style="font-size: 1rem;">💰</span> 剩余预算</div>
+<div class="uni-sub-value" style="color: {left_color};">${left:,.0f}</div>
+</div>
+<div class="uni-sub-card">
+<div class="uni-sub-label"><span style="font-size: 1rem;">🔄</span> 活跃订阅</div>
+<div class="uni-sub-value text-blue">{active_subs}</div>
+</div>
+</div>
+</div>""".strip()
+    st.markdown(kpi_html, unsafe_allow_html=True)
 
 def render_mobile_floating_bar():
     # Current Page
@@ -1478,7 +1531,7 @@ def render_mobile_dashboard(df, services, supabase, user):
                 display: flex !important;
             }
             
-            .bc-bottom { padding: 4px 16px 12px 16px !important; background: transparent !important; border-top: none !important;}
+            .bc-bottom { padding: 20px 16px 20px 16px !important; background: transparent !important; border-top: none !important;}
             
             /* Hide elements to save space */
             .bc-amount-sub { font-size: 0.75rem !important; opacity: 0.6; }
@@ -1523,7 +1576,7 @@ def render_mobile_dashboard(df, services, supabase, user):
 
     # 3. Budget Cards
     st.subheader("💰 预算详情")
-    render_budget_cards(df, services, supabase)
+    render_budget_cards(df, services, supabase, is_mobile=True)
 
     # 4. Trend Chart
     st.subheader("📉 支出趋势")

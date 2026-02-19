@@ -70,7 +70,7 @@ def get_daily_activity(supabase, days=180):
         start_date = end_date - datetime.timedelta(days=days)
         
         response = supabase.table("expenses") \
-            .select("date") \
+            .select("date, amount") \
             .gte("date", start_date.strftime("%Y-%m-%d")) \
             .lte("date", end_date.strftime("%Y-%m-%d")) \
             .execute()
@@ -78,11 +78,15 @@ def get_daily_activity(supabase, days=180):
         if not response.data:
             return {}
             
-        # Count occurrences
+        # Sum amounts
         counts = {}
         for row in response.data:
             d = row["date"]
-            counts[d] = counts.get(d, 0) + 1
+            try:
+                amt = float(row.get("amount", 0) or 0)
+            except:
+                amt = 0
+            counts[d] = counts.get(d, 0) + amt
             
         return counts
     except Exception as e:
