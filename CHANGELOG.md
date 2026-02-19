@@ -1,5 +1,11 @@
 # Changelog
 
+## [V3.3] - 2026-02-19
+### Visual Overhaul
+- **Budget Cards Redesign**: Dual-color cards with professional dark blue header, thick progress bars (40px) with color warnings, and "Today" timeline indicator.
+- **Daily Advice**: Automatic calculation of recommended daily spending based on remaining budget.
+- **Visual Consistency**: Unified KPI title styles and strictly aligned Heatmap height.
+
 ## [V3.2] - 2026-02-10
 ### Added
 - **Responsive Layout**: Updated `app.py` to use `layout="wide"`, improving usability on desktop and mobile.
