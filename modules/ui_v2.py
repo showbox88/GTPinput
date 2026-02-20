@@ -20,6 +20,7 @@ CATEGORIES = ["餐饮", "日用品", "交通", "服饰", "医疗", "娱乐", "�
 # ==========================================
 # CUSTOM CSS & COMPONENTS
 # ==========================================
+# UI Version: 2.1 (Force Update - Alignment Fixes)
 def inject_custom_css():
     st.markdown("""
     <style>
