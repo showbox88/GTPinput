@@ -54,6 +54,8 @@ if not st.session_state.get("session"):
                 res = auth.sign_in(supabase, email, password, remember)
                 st.session_state["session"] = res.session
                 st.session_state["user"] = res.user
+                if "messages" in st.session_state:
+                    del st.session_state["messages"]
                 st.rerun()
             except Exception as e:
                 st.error(f"登录失败: {e}")

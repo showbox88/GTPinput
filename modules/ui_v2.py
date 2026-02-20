@@ -170,7 +170,8 @@ def render_sidebar_nav():
 # Helper for Navigation Options
 NAV_OPTIONS = {
     "Dashboard": "📊  概览 (Dashboard)",
-    "Smart Chat": "💬  助手 (AI Chat)"
+    "Smart Chat": "💬  助手 (AI Chat)",
+    "Settings": "⚙️  账号与设置 (Settings)"
 }
 
 def render_sidebar_nav():
@@ -248,19 +249,6 @@ def render_sidebar_nav():
         on_change=on_nav_change
     )
 
-    # --- DEBUG SECTION ---
-    with st.sidebar.expander("🛠️ Debug Info", expanded=False):
-        user = st.session_state.get("user")
-        if user:
-            st.caption(f"User ID: `{user.id}`")
-            st.caption(f"Email: `{user.email}`")
-        else:
-            st.error("Not Logged In")
-        
-        if st.button("Clear Session & Reload"):
-            st.session_state.clear()
-            st.rerun()
-
     return st.session_state["v2_page"]
 
 def render_mobile_bottom_nav():
@@ -321,6 +309,9 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
     now = pd.Timestamp.now(tz=tz)
     this_month_str = now.strftime("%Y-%m")
     
+    user = st.session_state.get("user")
+    user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+    
     # Date Calculations for Timeline
     days_in_month = now.days_in_month
     current_day = now.day
@@ -356,11 +347,11 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
                 # Daily Advice
                 if days_left > 0 and left > 0:
                     daily_budget = left / days_left
-                    advice_text = f"建议每日消费 <span style='color:#fff; font-weight:600;'>${daily_budget:.0f}</span>，还剩 {days_left} 天"
+                    advice_text = f"建议每日消费 <span style='color:#fff; font-weight:600;'>{user_currency}{daily_budget:.0f}</span>，还剩 {days_left} 天"
                 elif left <= 0:
                     advice_text = "⚠️ 预算已超支 (Over Budget)"
                 else: # Last day
-                    advice_text = f"最后一天，剩余预算 ${left:.0f}"
+                    advice_text = f"最后一天，剩余预算 {user_currency}{left:.0f}"
 
                 # Health & Color Determination
                 # Logic: Progressive Gradient based on usage pct
@@ -403,8 +394,8 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
 <div class="bc-cat-name">{b['category']}</div>
 </div>
 <div style="text-align: right; margin-top: 4px;">
-<span class="bc-amount-big">${left:,.0f}</span>
-<span class="bc-amount-sub"> left of ${limit:,.0f}</span>
+<span class="bc-amount-big">{user_currency}{left:,.0f}</span>
+<span class="bc-amount-sub"> left of {user_currency}{limit:,.0f}</span>
 </div>
 </div>
 """
@@ -430,8 +421,8 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
 <div class="bc-cat-name">{b['category']}</div>
 <div class="bc-icon-box" style="font-size: 1.8rem;">{icon}</div>
 </div>
-<div class="bc-amount-big">${left:,.0f}</div>
-<div class="bc-amount-sub">left of ${limit:,.0f}</div>
+<div class="bc-amount-big">{user_currency}{left:,.0f}</div>
+<div class="bc-amount-sub">left of {user_currency}{limit:,.0f}</div>
 </div>
 """
 
@@ -597,6 +588,9 @@ def render_top_navigation(df, services, supabase, is_mobile=False):
     subs = services.get_recurring_rules(supabase)
     active_subs = len(subs)
 
+    user = st.session_state.get("user")
+    user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+
     # Render Clickable KPI Cards with Ghost Button Strategy (Overlay)
     c1, c2, c3 = st.columns(3)
     
@@ -604,7 +598,7 @@ def render_top_navigation(df, services, supabase, is_mobile=False):
         st.markdown(f"""
         <div id="kpi-card-1" class="kpi-card-visual kpi-blue">
             <div class="kpi-title">📅 本月支出 (Month)</div>
-            <div class="kpi-value">${month_total:,.2f}</div>
+            <div class="kpi-value">{user_currency}{month_total:,.2f}</div>
             <div class="kpi-meta">{count} 笔交易</div>
         </div>
         """, unsafe_allow_html=True)
@@ -615,8 +609,8 @@ def render_top_navigation(df, services, supabase, is_mobile=False):
         st.markdown(f"""
         <div id="kpi-card-2" class="kpi-card-visual kpi-purple">
             <div class="kpi-title">💰 剩余预算 (Left)</div>
-            <div class="kpi-value">${left:,.2f}</div>
-            <div class="kpi-meta">总额: ${budget_total:,.0f}</div>
+            <div class="kpi-value">{user_currency}{left:,.2f}</div>
+            <div class="kpi-meta">总额: {user_currency}{budget_total:,.0f}</div>
         </div>
         """, unsafe_allow_html=True)
         st.button(" ", key="btn_analysis_ghost", use_container_width=True, on_click=navigate_to, args=("Analysis",))
@@ -671,7 +665,10 @@ def render_heatmap(supabase, is_mobile=False):
         elif amount <= 500: color = "#26a641"
         else: color = "#39d353"
         
-        cells.append(f'<div class="heatmap-cell" style="background-color:{color};" title="{d_str}: ¥{amount:,.0f}"></div>')
+        user = st.session_state.get("user")
+        user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+        
+        cells.append(f'<div class="heatmap-cell" style="background-color:{color};" title="{d_str}: {user_currency}{amount:,.0f}"></div>')
         
         # Track months for labels
         m = d.strftime("%b")
@@ -752,10 +749,14 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
             tz = pytz.timezone("Asia/Shanghai")
             this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
             
+            user = st.session_state.get("user")
+            user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+            
             if "月(yyyy-mm)" in df.columns:
                 daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
                 if not daily_trend.empty:
                     fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
+                    fig.update_traces(hovertemplate="%{x}<br>有效金额: " + user_currency + "%{y:,.2f}<extra></extra>")
                     fig.update_layout(
                         paper_bgcolor="rgba(0,0,0,0)", 
                         plot_bgcolor="rgba(0,0,0,0)", 
@@ -783,6 +784,9 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
         yesterday_str = (now_cn - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
         
         current_group = None
+        
+        user = st.session_state.get("user")
+        user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
         
         for _, row in df_sorted.iterrows():
             d_str = pd.to_datetime(row["日期"]).strftime("%Y-%m-%d")
@@ -816,7 +820,7 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
                         <div style="color:#666; font-size:0.8rem;">{cat} • {row.get('备注','')}</div>
                     </div>
                 </div>
-                <div style="color:#FF4B4B; font-weight:600;">-${row['有效金额']:,.0f}</div>
+                <div style="color:#FF4B4B; font-weight:600;">-{user_currency}{row['有效金额']:,.0f}</div>
             </div>
             """, unsafe_allow_html=True)
             
@@ -857,9 +861,17 @@ def render_analysis(df, services, supabase, is_mobile=False):
              df_pie = df.copy()
              df_pie["IconLabel"] = df_pie["分类"].apply(lambda x: f"{icon_map.get(x, '💰')} {x}")
              
+             user = st.session_state.get("user")
+             user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+             
              fig = px.pie(df_pie, names="IconLabel", values="有效金额", hole=0.6, 
                  color_discrete_sequence=["#2F80ED", "#56CCF2", "#6FCF97", "#F2C94C", "#BB6BD9", "#EB5757", "#9B51E0", "#2D9CDB"])
-             fig.update_traces(textinfo='percent+label', textposition='inside', textfont_color="white")
+             fig.update_traces(
+                 textinfo='percent+label', 
+                 textposition='inside', 
+                 textfont_color="white",
+                 hovertemplate="%{label}<br>有效金额: " + user_currency + "%{value:,.2f}<extra></extra>"
+             )
              fig.update_layout(
                  paper_bgcolor="rgba(0,0,0,0)", 
                  margin=dict(t=20, b=20, l=20, r=20), 
@@ -875,9 +887,17 @@ def render_analysis(df, services, supabase, is_mobile=False):
     with c2:
         st.subheader("月度对比 (Monthly)")
         if not df.empty and "月(yyyy-mm)" in df.columns:
+            user = st.session_state.get("user")
+            user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+            
             monthly = df.groupby("月(yyyy-mm)")["有效金额"].sum().reset_index()
             fig = px.bar(monthly, x="月(yyyy-mm)", y="有效金额", text_auto=".2s")
-            fig.update_traces(marker_color='#2F80ED', marker_line_width=0, textfont_color="#fff")
+            fig.update_traces(
+                marker_color='#2F80ED', 
+                marker_line_width=0, 
+                textfont_color="#fff",
+                hovertemplate="%{x}<br>有效金额: " + user_currency + "%{y:,.2f}<extra></extra>"
+            )
             fig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
@@ -895,6 +915,9 @@ def render_subscriptions(df, services, supabase, is_mobile=False):
         st.info("暂无订阅信息，请点击右上角 '+' 按钮添加。")
         rules = []
 
+    user = st.session_state.get("user")
+    user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+
     # 1. Summary Cards
     total_monthly = sum([r["amount"] for r in rules if r["frequency"] == "Monthly"]) + \
                     sum([r["amount"] * 4 for r in rules if r["frequency"] == "Weekly"]) + \
@@ -902,7 +925,7 @@ def render_subscriptions(df, services, supabase, is_mobile=False):
                     
     c1, c2 = st.columns(2)
     with c1:
-        st.metric("月度固定支出 (Est. Monthly)", f"${total_monthly:,.2f}")
+        st.metric("月度固定支出 (Est. Monthly)", f"{user_currency}{total_monthly:,.2f}")
     with c2:
         st.metric("活跃订阅数 (Active Subs)", f"{len(rules)}")
         
@@ -916,7 +939,7 @@ def render_subscriptions(df, services, supabase, is_mobile=False):
             r_cat = c_cat.selectbox("分类", CATEGORIES)
             
             c_amt, c_freq = st.columns(2)
-            r_amt = c_amt.number_input("金额 ($)", min_value=0.0, step=1.0)
+            r_amt = c_amt.number_input(f"金额 ({user_currency})", min_value=0.0, step=1.0)
             r_freq = c_freq.selectbox("周期", ["Monthly", "Weekly", "Yearly"])
             
             tz = pytz.timezone("Asia/Shanghai")
@@ -935,7 +958,7 @@ def render_subscriptions(df, services, supabase, is_mobile=False):
         
         r_cfg = {
             "name": st.column_config.TextColumn("名称", required=True, width="medium"),
-            "amount": st.column_config.NumberColumn("金额", format="$%.2f", width="small"),
+            "amount": st.column_config.NumberColumn(f"金额 ({user_currency})", format=f"{user_currency}%.2f", width="small"),
             "day": st.column_config.NumberColumn("日/W", min_value=0, max_value=31, width="small", help="每月几号或每周几"),
             "delete": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
             "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="small"),
@@ -1004,11 +1027,14 @@ def render_transactions(df, services, supabase, is_mobile=False):
     edit_cols = ["删除", "日期", "项目", "金额", "分类", "备注", "id"]
     df_show["删除"] = False
     
+    user = st.session_state.get("user")
+    user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+
     col_cfg = {
         "删除": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
         "日期": st.column_config.DateColumn("日期", width="medium"),
         "项目": st.column_config.TextColumn("项目", width="large"),
-        "金额": st.column_config.NumberColumn("金额 ($)", format="$%.2f", width="small"),
+        "金额": st.column_config.NumberColumn(f"金额 ({user_currency})", format=f"{user_currency}%.2f", width="small"),
         "分类": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="medium"),
         "备注": st.column_config.TextColumn("备注", width="large"),
         "id": None
@@ -1051,16 +1077,18 @@ def render_chat(df, services, supabase, user, is_mobile=False):
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": "👋 准备好记账了吗？"}]
         
+    user_avatar = user.user_metadata.get("avatar_url") if user.user_metadata.get("avatar_url") else "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123"
+
     with chat_container:
         for msg in st.session_state.messages:
              role = msg["role"]
-             avatar = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput" if role == "assistant" else "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123"
+             avatar = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput" if role == "assistant" else user_avatar
              st.chat_message(role, avatar=avatar).write(msg["content"])
 
     if prompt := st.chat_input("例如：打车 50，超市买菜 120..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with chat_container:
-            st.chat_message("user", avatar="https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123").write(prompt)
+            st.chat_message("user", avatar=user_avatar).write(prompt)
         
         with chat_container:
              with st.chat_message("assistant", avatar="https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput"):
@@ -1071,7 +1099,9 @@ def render_chat(df, services, supabase, user, is_mobile=False):
                  budgets = services.get_budgets(supabase)
                  subs = services.get_recurring_rules(supabase)
                  
-                 result = expense_chat.process_user_message(prompt, df, budgets, subs)
+                 user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+                 
+                 result = expense_chat.process_user_message(prompt, df, budgets, subs, user_currency=user_currency)
                  reply = "Completed."
                  
                  intent = result.get("type", "chat")
@@ -1198,26 +1228,6 @@ def render_chat(df, services, supabase, user, is_mobile=False):
         st.rerun()
 
     st.divider()
-    with st.expander("⚙️ 设置 & 账号 (Settings)", expanded=False):
-        st.write(f"Email: {user.email}")
-        
-        st.divider()
-        st.write("🎨 个性化 (Customization)")
-        uploaded_logo = st.file_uploader("更换 Logo (Change Logo)", type=["png", "jpg", "jpeg"], key="v2_logo_uploader")
-        if uploaded_logo:
-             import os
-             if not os.path.exists("assets"): os.makedirs("assets")
-             with open("assets/logo.png", "wb") as f:
-                 f.write(uploaded_logo.getbuffer())
-             st.success("✅ Logo 已更新! (Updated)")
-             time.sleep(1)
-             st.rerun()
-             
-        st.divider()
-        if st.button("注销 (Logout)", type="secondary", use_container_width=True):
-            supabase.auth.sign_out()
-            st.session_state["session"] = None
-            st.rerun()
 
     # Autofocus for Mobile Experience
     if is_mobile:
@@ -1236,6 +1246,8 @@ def render_chat(df, services, supabase, user, is_mobile=False):
 def render_budgets(df, services, supabase, user, is_mobile=False):
     render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     st.header("预算管理 (Budgets)")
+    
+    user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
     
     # === 1. Budget Breakdown (Visuals) ===
     with st.container(border=True):
@@ -1266,7 +1278,7 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
     with st.popover("➕ 添加新预算 (Add Budget)", use_container_width=True):
         with st.form("v2_add_budget_page"):
             b_cat = st.selectbox("分类", CATEGORIES, key="v2_b_cat_page")
-            b_amt = st.number_input("限额 ($)", min_value=0, step=100, key="v2_b_amt_page")
+            b_amt = st.number_input(f"限额 ({user_currency})", min_value=0, step=100, key="v2_b_amt_page")
             if st.form_submit_button("确认添加", type="primary", use_container_width=True):
                 icon_map = {"餐饮":"🍔", "交通":"🚗", "日用品":"🛒", "服饰":"👔", "娱乐":"🎮", "医疗":"💊", "居住":"🏠", "其他":"📦"}
                 icon = icon_map.get(b_cat, "💰")
@@ -1284,7 +1296,7 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
         
         b_cfg = {
             "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, required=True, width="medium"),
-            "amount": st.column_config.NumberColumn("限额", min_value=0, step=100, format="$%d"),
+            "amount": st.column_config.NumberColumn(f"限额 ({user_currency})", min_value=0, step=100, format=f"{user_currency}%d"),
             "delete": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
             "name": None, "id": None, "user_id": None, "icon": None, "color": None, "created_at": None
         }
@@ -1322,7 +1334,110 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
             st.cache_data.clear()
             st.rerun()
 
+def render_settings(supabase, user, is_mobile=False):
+    st.header("⚙️ 账号与个人设置 (Settings)")
+    st.caption("个性化您的控制台体验。")
+    
+    with st.container(border=True):
+        st.write(f"**Email:** {user.email}")
+        st.write(f"**User ID:** {user.id}")
+        
+    st.divider()
+    
+    st.subheader("🎨 个性化专属头像 (Avatar)")
+    st.caption("更改左侧导航栏的专属头像。每位用户均可拥有独立的个人头像，不再与他人共享。")
+    uploaded_logo = st.file_uploader("上传您的专属 Logo (Upload Logo)", type=["png", "jpg", "jpeg"], key="v2_user_logo_uploader")
+    if uploaded_logo:
+         if uploaded_logo.size > 2 * 1024 * 1024:
+             st.error("❌ 文件太大啦！请上传小于 2MB 的图片。")
+         else:
+             try:
+                 # Upload to Supabase Storage
+                 file_bytes = uploaded_logo.getvalue()
+                 file_path = f"{user.id}/avatar.png"
+                 content_type = uploaded_logo.type
+                 
+                 res = supabase.storage.from_("avatars").upload(
+                     file_path, 
+                     file_bytes, 
+                     {"upsert": "true", "content-type": content_type}
+                 )
+                 
+                 # Get Public URL and update metadata
+                 public_url = supabase.storage.from_("avatars").get_public_url(file_path)
+                 supabase.auth.update_user({"data": {"avatar_url": public_url}})
+                 
+                 # Refresh session state
+                 auth_res = supabase.auth.get_user()
+                 if auth_res and auth_res.user:
+                     st.session_state["user"] = auth_res.user
+                     
+                 st.success("✅ 您的专属个人 Logo 已成功上传至云端并生效!")
+                 import time
+                 time.sleep(1)
+                 st.rerun()
+             except Exception as e:
+                 st.error(f"上传失败: {e}")
+         
+    st.divider()
+    
+    st.subheader("💱 本地货币 (Currency)")
+    st.caption("选择您记账时默认使用的货币符号。")
+    cu_options = ["¥ (CNY人民币)", "$ (USD美元)", "€ (EUR欧元)", "£ (GBP英镑)", "₩ (KRW韩元)", "¥ (JPY日元)", "฿ (THB泰铢)"]
+    
+    current_currency = user.user_metadata.get("currency_symbol", "$ (USD美元)")
+    # Fallback if somehow current_currency is not in options (e.g., just "$")
+    if current_currency not in cu_options:
+        # Try to match by symbol
+        matched = next((opt for opt in cu_options if current_currency in opt), "¥ (CNY人民币)")
+        current_currency = matched
 
+    with st.form("currency_form"):
+        selected_cu = st.selectbox("选择货币 (Select Currency)", options=cu_options, index=cu_options.index(current_currency))
+        if st.form_submit_button("保存货币设置 (Save)", type="primary"):
+            try:
+                # We save the full string so the dropdown remembers exactly
+                # But we'll extract the first character as the absolute symbol when rendering
+                supabase.auth.update_user({"data": {"currency_symbol": selected_cu}})
+                st.success(f"✅ 默认货币已更改为 {selected_cu.split(' ')[0]}")
+                res = supabase.auth.get_user()
+                if res and res.user:
+                    st.session_state["user"] = res.user
+                import time
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"保存失败: {e}")
+
+    st.divider()
+    
+    st.subheader("🔑 OpenAI API Key (选填)")
+    st.caption("填入您自己的 OpenAI API Key 以启用智能对话和自动记账功能。此 Key 仅保存在您的个人元数据中。")
+    
+    current_key = user.user_metadata.get("openai_api_key", "")
+    with st.form("api_key_form"):
+        new_key = st.text_input("OpenAI API Key (sk-...)", value=current_key, type="password")
+        if st.form_submit_button("保存 Key (Save)", type="primary"):
+            try:
+                # Update user metadata
+                supabase.auth.update_user({"data": {"openai_api_key": new_key}})
+                st.success("✅ OpenAI API Key 已安全保存至您的账号!")
+                res = supabase.auth.get_user()
+                if res and res.user:
+                    st.session_state["user"] = res.user
+                import time
+                time.sleep(1)
+                st.rerun()
+            except Exception as e:
+                st.error(f"保存失败: {e}")
+
+    st.divider()
+    if st.button("🚪 注销退出 (Logout)", type="secondary", use_container_width=True):
+        supabase.auth.sign_out()
+        st.session_state["session"] = None
+        if "messages" in st.session_state:
+            del st.session_state["messages"]
+        st.rerun()
 
 # ==========================================
 # MAIN RENDER ENTRY
@@ -1355,6 +1470,9 @@ def render_unified_kpi_card(df, services, supabase):
     subs = services.get_recurring_rules(supabase)
     active_subs = len(subs)
 
+    user = st.session_state.get("user")
+    user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+
     # Kpi Card HTML Structure matching the design request (No indentation to prevent code block rendering)
     kpi_html = f"""
 <style>
@@ -1384,13 +1502,13 @@ def render_unified_kpi_card(df, services, supabase):
         <div class="kpi-label-row">
              <span style="font-size: 1.1rem;">🗓️</span> <span>本月支出 (Month Spend)</span>
         </div>
-        <div class="kpi-main-value">${month_total:,.2f}</div>
+        <div class="kpi-main-value">{user_currency}{month_total:,.2f}</div>
     </div>
     <div class="kpi-divider"></div>
     <div class="kpi-bottom-section">
         <div class="kpi-sub-item">
             <div class="kpi-sub-label" style="justify-content: flex-start;"><span style="font-size: 1rem; margin-right: 4px;">💰</span> 剩余预算 (Remaining)</div>
-            <div class="kpi-sub-value" style="text-align: left;">${left:,.2f}</div>
+            <div class="kpi-sub-value" style="text-align: left;">{user_currency}{left:,.2f}</div>
         </div>
         <div class="kpi-sub-item text-right">
             <div class="kpi-sub-label" style="justify-content: flex-start;">活跃订阅 (Subs) <span style="font-size: 1rem; margin-left: 4px;">🔄</span></div>
@@ -1572,9 +1690,17 @@ def render_mobile_dashboard(df, services, supabase, user):
          df_pie = df.copy()
          df_pie["IconLabel"] = df_pie["分类"].apply(lambda x: f"{icon_map.get(x, '💰')} {x}")
          
+         user = st.session_state.get("user")
+         user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+         
          fig = px.pie(df_pie, names="IconLabel", values="有效金额", hole=0.6, 
              color_discrete_sequence=["#2F80ED", "#56CCF2", "#6FCF97", "#F2C94C", "#BB6BD9", "#EB5757", "#9B51E0", "#2D9CDB"])
-         fig.update_traces(textinfo='percent+label', textposition='inside', textfont_color="white")
+         fig.update_traces(
+             textinfo='percent+label', 
+             textposition='inside', 
+             textfont_color="white",
+             hovertemplate="%{label}<br>有效金额: " + user_currency + "%{value:,.2f}<extra></extra>"
+         )
          fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=0, b=0, l=0, r=0), showlegend=False, height=260)
          st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True})
 
@@ -1587,9 +1713,13 @@ def render_mobile_dashboard(df, services, supabase, user):
     tz = pytz.timezone("Asia/Shanghai")
     this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
     if "月(yyyy-mm)" in df.columns:
+        user = st.session_state.get("user")
+        user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+        
         daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
         if not daily_trend.empty:
             fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
+            fig.update_traces(hovertemplate="%{x}<br>有效金额: " + user_currency + "%{y:,.2f}<extra></extra>")
             fig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
                 margin=dict(l=0, r=0, t=0, b=0),
@@ -1610,6 +1740,9 @@ def render_mobile_dashboard(df, services, supabase, user):
     st.subheader("📝 最近记录")
     if not df.empty:
         df_sorted = df.sort_values(by=["date", "id"], ascending=[False, False]).head(5)
+        user = st.session_state.get("user")
+        user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
+        
         for _, row in df_sorted.iterrows():
             cat = row["分类"]
             icon_map = {"餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"}
@@ -1620,7 +1753,7 @@ def render_mobile_dashboard(df, services, supabase, user):
                     <div style="font-size:1.2rem;">{icon}</div>
                     <div style="font-weight:500; font-size:0.95rem; color:#eee;">{row['项目']}</div>
                 </div>
-                <div style="font-size:0.95rem; font-weight:600; color:#FF4B4B;">-${row['有效金额']:,.0f}</div>
+                <div style="font-size:0.95rem; font-weight:600; color:#FF4B4B;">-{user_currency}{row['有效金额']:,.0f}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -1680,9 +1813,10 @@ def render(supabase):
     # Desktop View Entry (Original Logic)
     with st.sidebar:
         logo_url = "https://api.dicebear.com/9.x/bottts/svg?seed=FinanceHelper&backgroundColor=00a6ff"
-        import os
-        if os.path.exists("assets/logo.png"):
-            logo_url = "assets/logo.png"
+        
+        user = st.session_state.get("user")
+        if user and user.user_metadata.get("avatar_url"):
+            logo_url = user.user_metadata.get("avatar_url")
         
         st.image(logo_url, width=100)
         st.markdown(f"### 智能记账小助手")
@@ -1708,5 +1842,7 @@ def render(supabase):
         render_budgets(df, services, supabase, st.session_state["user"], is_mobile=(device_type == "mobile"))
     elif page == "Subscriptions":
         render_subscriptions(df, services, supabase, is_mobile=(device_type == "mobile"))
+    elif page == "Settings":
+        render_settings(supabase, st.session_state["user"], is_mobile=(device_type == "mobile"))
     elif page == "Smart Chat":
         render_chat(df, services, supabase, st.session_state["user"], is_mobile=(device_type == "mobile"))

@@ -1,5 +1,11 @@
 # Changelog
 
+## [V3.6] - 2026-02-20
+### Global Multi-Currency Support & AI Optimization
+- **Dynamic Currency Selector**: Users can now select their preferred currency (e.g., USD, CNY, EUR, THB) from the Settings page. This preference is permanently stored in Supabase `user_metadata`.
+- **UI Currency Injection**: All Dashboard KPI cards, Heatmaps, Budget progress bars, and data tables now dynamically render the user's selected symbol instead of hardcoded USD/CNY.
+- **AI Exchange Rate Engine**: Re-engineered the `SYSTEM_PROMPT` in `expense_chat.py` to enforce the user's primary currency in all money-related replies, whilst granting the AI explicit permission to calculate real-time exchange rate estimates when cross-currency queries are asked.
+
 ## [V3.5] - 2026-02-19
 ### Professional UI & Robust Rendering
 - **Unified KPI Card V3**: Aesthetic redesign featuring glassmorphism, bold hero typography, and text gradients for a professional financial look.

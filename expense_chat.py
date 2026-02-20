@@ -54,7 +54,7 @@ You have access to:
 3. **DELETE Expense** (User says "Delete the last taxi record"):
    - Output JSON: `{ "type": "delete", "id": 12345, "reply": "..." }`
 
-4. **UPDATE Expense** (User says "Change 30 yuan one to 40"):
+4. **UPDATE Expense** (User says "Change 30 one to 40"):
    - Output JSON: `{ "type": "update", "id": 12345, "updates": { "amount": 40 }, "reply": "..." }`
 
 5. **ADD BUDGET** (User says "Set dining budget to 2000", "Budget for Transport 500"):
@@ -65,7 +65,7 @@ You have access to:
        "type": "budget_add",
        "category": "餐饮",
        "amount": 2000,
-       "reply": "已为您设置餐饮预算 2000 元。"
+       "reply": "已为您设置餐饮预算 2000。"
      }
      ```
 
@@ -98,9 +98,18 @@ You have access to:
 Expenses (Top 50): %DATA_EXPENSES%
 Budgets: %DATA_BUDGETS%
 Subscriptions: %DATA_SUBS%
+
+User Currency Symbol: %USER_CURRENCY%
+
+**CRITICAL CURRENCY INSTRUCTION**:
+The user's preferred primary currency is "%USER_CURRENCY%". 
+Whenever you generate a natural language `reply` that mentions an amount of money from their records, you MUST use ONLY the "%USER_CURRENCY%" symbol. Do NOT use words like "元", "dollars", "块", "yuan", "bucks", "USD", etc. 
+Example Correct Reply: "已为您添加分类为餐饮的支出，金额为 %USER_CURRENCY%50。"
+Example Incorrect Reply: "记录了 50 元餐饮费。"
+EXCEPTION: If the user explicitly asks you to convert a value to another currency (e.g. "What is my spending in USD?"), you MUST calculate the approximate exchange rate using your internal knowledge (do not refuse by saying you cannot check live rates) and respond using the requested currency's symbol.
 """
 
-def process_user_message(user_text, df, budgets=None, recurring=None):
+def process_user_message(user_text, df, budgets=None, recurring=None, user_currency="$"):
     """
     Process text input with full context.
     """
@@ -134,7 +143,8 @@ def process_user_message(user_text, df, budgets=None, recurring=None):
         .replace("%TODAY%", today_str) \
         .replace("%DATA_EXPENSES%", context_exp) \
         .replace("%DATA_BUDGETS%", context_bud) \
-        .replace("%DATA_SUBS%", context_sub)
+        .replace("%DATA_SUBS%", context_sub) \
+        .replace("%USER_CURRENCY%", user_currency)
 
     try:
         response = client.chat.completions.create(

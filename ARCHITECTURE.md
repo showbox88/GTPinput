@@ -25,7 +25,7 @@ This project is a daily expense tracking system designed for speed, modularity, 
 ### 3. Data Storage & Auth
 - **Component**: Supabase
 - **Database**: PostgreSQL (Tables: `expenses`, `budgets`, `recurring_rules`)
-- **Auth**: Supabase Auth (Email/Password) with improved Session persistence.
+- **Auth**: Supabase Auth (Email/Password) with improved Session persistence. Uses `user_metadata` to permanently store individual preferences like `currency_symbol` and `openai_api_key`.
 
 ### 4. External Services
 - **OpenAI**: NLP (Text parsing & Intent recognition).
