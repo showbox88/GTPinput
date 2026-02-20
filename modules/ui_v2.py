@@ -1354,47 +1354,50 @@ def render_unified_kpi_card(df, services, supabase):
     subs = services.get_recurring_rules(supabase)
     active_subs = len(subs)
 
-    left_color = "#6FCF97" if left > 0 else "#EB5757"
-    
-    kpi_html = f"""<style>
-.uni-card-v3 {{
-background: linear-gradient(135deg, #0f2027 0%, #203a43 50%, #2c5364 100%);
-border-radius: 28px;
-padding: 24px;
-color: white;
-margin-bottom: 24px;
-box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-border: 1px solid rgba(255,255,255,0.08);
-font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    # Kpi Card HTML Structure matching the design request (No indentation to prevent code block rendering)
+    kpi_html = f"""
+<style>
+.kpi-card-v4 {{
+    background: radial-gradient(circle at top left, #1a2a33 0%, #0d1216 100%);
+    border-radius: 20px;
+    padding: 24px;
+    color: white;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.05);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }}
-.uni-hero {{ margin-bottom: 20px; text-align: left; }}
-.uni-hero-label {{ font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px; opacity: 0.7; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }}
-.uni-hero-value {{ font-size: 3rem; font-weight: 900; letter-spacing: -1.5px; line-height: 1; background: linear-gradient(to bottom, #ffffff, #e0e0e0); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-.uni-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
-.uni-sub-card {{ background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); padding: 16px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.1); }}
-.uni-sub-label {{ font-size: 0.7rem; font-weight: 600; opacity: 0.6; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }}
-.uni-sub-value {{ font-size: 1.4rem; font-weight: 700; }}
-.text-red {{ color: #EB5757 !important; }}
-.text-green {{ color: #6FCF97 !important; }}
-.text-blue {{ color: #56CCF2 !important; }}
-.icon-box {{ width: 32px; height: 32px; background: rgba(255,255,255,0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }}
+.kpi-top-section {{ margin-bottom: 12px; }}
+.kpi-label-row {{ display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }}
+.kpi-label-text {{ font-size: 0.9rem; color: #b0b0b0; font-weight: 400; letter-spacing: 0.5px; }}
+.kpi-main-value {{ font-size: 2.8rem; font-weight: 700; color: #ffffff; line-height: 1.1; letter-spacing: -1px; }}
+.kpi-divider {{ height: 1px; background-color: rgba(255,255,255,0.1); width: 100%; margin: 20px 0; }}
+.kpi-bottom-section {{ display: flex; justify-content: space-between; align-items: flex-start; }}
+.kpi-sub-item {{ display: flex; flex-direction: column; }}
+.kpi-sub-label {{ font-size: 0.85rem; color: #b0b0b0; margin-bottom: 8px; height: 24px; display: flex; align-items: center; justify-content: flex-start; }}
+.kpi-sub-value {{ font-size: 1.4rem; font-weight: 700; color: #ffffff; line-height: 1; text-align: left; }}
+.text-right {{ align-items: flex-start; }}
 </style>
-<div class="uni-card-v3">
-<div class="uni-hero">
-<div class="uni-hero-label"><div class="icon-box">💸</div>本月累计支出</div>
-<div class="uni-hero-value">${month_total:,.0f}</div>
+<div class="kpi-card-v4">
+    <div class="kpi-top-section">
+        <div class="kpi-label-row">
+             <span style="font-size: 1.1rem;">🗓️</span> <span>本月支出 (Month Spend)</span>
+        </div>
+        <div class="kpi-main-value">${month_total:,.2f}</div>
+    </div>
+    <div class="kpi-divider"></div>
+    <div class="kpi-bottom-section">
+        <div class="kpi-sub-item">
+            <div class="kpi-sub-label" style="justify-content: flex-start;"><span style="font-size: 1rem; margin-right: 4px;">💰</span> 剩余预算 (Remaining)</div>
+            <div class="kpi-sub-value" style="text-align: left;">${left:,.2f}</div>
+        </div>
+        <div class="kpi-sub-item text-right">
+            <div class="kpi-sub-label" style="justify-content: flex-start;">活跃订阅 (Subs) <span style="font-size: 1rem; margin-left: 4px;">🔄</span></div>
+            <div class="kpi-sub-value" style="text-align: left;">{active_subs}</div>
+        </div>
+    </div>
 </div>
-<div class="uni-grid">
-<div class="uni-sub-card">
-<div class="uni-sub-label"><span style="font-size: 1rem;">💰</span> 剩余预算</div>
-<div class="uni-sub-value" style="color: {left_color};">${left:,.0f}</div>
-</div>
-<div class="uni-sub-card">
-<div class="uni-sub-label"><span style="font-size: 1rem;">🔄</span> 活跃订阅</div>
-<div class="uni-sub-value text-blue">{active_subs}</div>
-</div>
-</div>
-</div>""".strip()
+"""
     st.markdown(kpi_html, unsafe_allow_html=True)
 
 def render_mobile_floating_bar():
