@@ -1083,11 +1083,19 @@ def render_chat(df, services, supabase, user, is_mobile=False):
                 left: 50% !important;
                 transform: translateX(-50%) !important;
             }
-            /* Reduce chat input height by 6px by targeting its internal container */
+            /* Forcefully reduce chat input overall height */
+            [data-testid="stChatInput"] > div {
+                min-height: 38px !important;
+                padding: 4px 12px !important;
+            }
             [data-testid="stChatInput"] textarea {
-                min-height: 38px !important; /* Default was likely 44 */
-                padding-top: 8px !important;
-                padding-bottom: 8px !important;
+                min-height: 30px !important; 
+                padding-top: 6px !important;
+                padding-bottom: 6px !important;
+            }
+            [data-testid="stChatInput"] button {
+                height: 30px !important;
+                min-height: 30px !important;
             }
         </style>
         """, unsafe_allow_html=True)
@@ -1478,8 +1486,9 @@ def render_settings(supabase, user, is_mobile=False):
                      {"upsert": "true", "content-type": content_type}
                  )
                  
-                 # Get Public URL and update metadata
-                 public_url = supabase.storage.from_("avatars").get_public_url(file_path)
+                 # Get Public URL and update metadata with cache-busting timestamp
+                 base_public_url = supabase.storage.from_("avatars").get_public_url(file_path)
+                 public_url = f"{base_public_url}?t={int(time.time())}"
                  supabase.auth.update_user({"data": {"avatar_url": public_url}})
                  
                  # Refresh session state
