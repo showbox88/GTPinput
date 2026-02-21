@@ -175,13 +175,15 @@ def render_sidebar_nav():
     """, unsafe_allow_html=True)
     
 # Helper for Navigation Options
-NAV_OPTIONS = {
-    "Dashboard": "📊  概览 (Dashboard)",
-    "Smart Chat": "💬  助手 (AI Chat)",
-    "Settings": "⚙️  账号与设置 (Settings)"
-}
+def get_nav_options():
+    return {
+        "Dashboard": _("nav_opt_dashboard"),
+        "Smart Chat": _("nav_opt_chat"),
+        "Settings": _("nav_opt_settings")
+    }
 
 def render_sidebar_nav():
+    st.sidebar.title(_("chat_sidebar_title"))
     st.markdown("""
     <style>
         div[data-testid="stRadio"] > label { display: none; }
@@ -223,8 +225,11 @@ def render_sidebar_nav():
     </style>
     """, unsafe_allow_html=True)
     
+    # Get dynamic localized options
+    nav_opts = get_nav_options()
+    
     # Reverse map for value lookup
-    rev_options = {v: k for k, v in NAV_OPTIONS.items()}
+    rev_options = {v: k for k, v in nav_opts.items()}
     
     # Ensure session state exists
     if "v2_page" not in st.session_state:
@@ -232,12 +237,12 @@ def render_sidebar_nav():
         
     # Determine current index
     current_page = st.session_state["v2_page"]
-    current_label = NAV_OPTIONS.get(current_page)
+    current_label = nav_opts.get(current_page)
     
     idx = None
     if current_label:
         try:
-            idx = list(NAV_OPTIONS.values()).index(current_label)
+            idx = list(nav_opts.values()).index(current_label)
         except ValueError:
             idx = None
 
@@ -249,7 +254,7 @@ def render_sidebar_nav():
     
     st.radio(
         "Menu",
-        list(NAV_OPTIONS.values()),
+        list(nav_opts.values()),
         index=idx,
         label_visibility="collapsed",
         key="v2_nav_radio",
@@ -304,9 +309,10 @@ def render_mobile_bottom_nav():
 
 def navigate_to(page_key):
     st.session_state["v2_page"] = page_key
+    nav_opts = get_nav_options()
     # Sync radio button
-    if page_key in NAV_OPTIONS:
-        st.session_state["v2_nav_radio"] = NAV_OPTIONS[page_key]
+    if page_key in nav_opts:
+        st.session_state["v2_nav_radio"] = nav_opts[page_key]
     else:
         st.session_state["v2_nav_radio"] = None
 
@@ -354,11 +360,11 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
                 # Daily Advice
                 if days_left > 0 and left > 0:
                     daily_budget = left / days_left
-                    advice_text = f"建议每日消费 <span style='color:#fff; font-weight:600;'>{user_currency}{daily_budget:.0f}</span>，还剩 {days_left} 天"
+                    advice_text = _("advice_daily").format(currency=user_currency, amount=int(daily_budget), days=days_left)
                 elif left <= 0:
-                    advice_text = "⚠️ 预算已超支 (Over Budget)"
+                    advice_text = _("advice_over")
                 else: # Last day
-                    advice_text = f"最后一天，剩余预算 {user_currency}{left:.0f}"
+                    advice_text = _("advice_last").format(currency=user_currency, amount=int(left))
 
                 # Health & Color Determination
                 # Logic: Progressive Gradient based on usage pct
@@ -398,11 +404,11 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
 <div class="bc-top">
 <div class="bc-cat-row">
 <div class="bc-icon-box" style="font-size: 1.5rem;">{icon}</div>
-<div class="bc-cat-name">{b['category']}</div>
+<div class="bc-cat-name">{_(f"cat_{b['category']}")}</div>
 </div>
 <div style="text-align: right; margin-top: 4px;">
 <span class="bc-amount-big">{user_currency}{left:,.0f}</span>
-<span class="bc-amount-sub"> left of {user_currency}{limit:,.0f}</span>
+<span class="bc-amount-sub">{_("budget_left_of")}{user_currency}{limit:,.0f}</span>
 </div>
 </div>
 """
@@ -425,11 +431,11 @@ def render_budget_cards(df, services, supabase, is_mobile=False):
                     top_html = f"""
 <div class="bc-top">
 <div class="bc-cat-row">
-<div class="bc-cat-name">{b['category']}</div>
+<div class="bc-cat-name">{_(f"cat_{b['category']}")}</div>
 <div class="bc-icon-box" style="font-size: 1.8rem;">{icon}</div>
 </div>
 <div class="bc-amount-big">{user_currency}{left:,.0f}</div>
-<div class="bc-amount-sub">left of {user_currency}{limit:,.0f}</div>
+<div class="bc-amount-sub">{_("budget_left_of")}{user_currency}{limit:,.0f}</div>
 </div>
 """
 
@@ -604,9 +610,9 @@ def render_top_navigation(df, services, supabase, is_mobile=False):
     with c1:
         st.markdown(f"""
         <div id="kpi-card-1" class="kpi-card-visual kpi-blue">
-            <div class="kpi-title">📅 本月支出 (Month)</div>
+            <div class="kpi-title">📅 {_('kpi_expense')}</div>
             <div class="kpi-value">{user_currency}{month_total:,.2f}</div>
-            <div class="kpi-meta">{count} 笔交易</div>
+            <div class="kpi-meta">{_("kpi_tx_count").format(count=count)}</div>
         </div>
         """, unsafe_allow_html=True)
         target_page = "Dashboard" if is_mobile else "Transactions"
@@ -615,9 +621,9 @@ def render_top_navigation(df, services, supabase, is_mobile=False):
     with c2:
         st.markdown(f"""
         <div id="kpi-card-2" class="kpi-card-visual kpi-purple">
-            <div class="kpi-title">💰 剩余预算 (Left)</div>
+            <div class="kpi-title">💰 {_('kpi_balance')}</div>
             <div class="kpi-value">{user_currency}{left:,.2f}</div>
-            <div class="kpi-meta">总额: {user_currency}{budget_total:,.0f}</div>
+            <div class="kpi-meta">{_("kpi_budget_total").format(amount=f"{user_currency}{budget_total:,.0f}")}</div>
         </div>
         """, unsafe_allow_html=True)
         st.button(" ", key="btn_analysis_ghost", use_container_width=True, on_click=navigate_to, args=("Analysis",))
@@ -625,9 +631,9 @@ def render_top_navigation(df, services, supabase, is_mobile=False):
     with c3:
         st.markdown(f"""
         <div id="kpi-card-3" class="kpi-card-visual kpi-dark">
-            <div class="kpi-title">🔄 活跃订阅 (Subs)</div>
+            <div class="kpi-title">🔄 {_('kpi_subs')}</div>
             <div class="kpi-value">{active_subs}</div>
-            <div class="kpi-meta">固定支出项目</div>
+            <div class="kpi-meta">{_("kpi_subs_meta")}</div>
         </div>
         """, unsafe_allow_html=True)
         st.button(" ", key="btn_subs_ghost", use_container_width=True, on_click=navigate_to, args=("Subscriptions",))
@@ -722,7 +728,7 @@ def render_heatmap(supabase, is_mobile=False):
         }}
     </style>
     <div class="heatmap-internal">
-        <div class="kpi-title" style="margin-bottom:5px;">🔥 活跃分布 (Activity)</div>
+        <div class="kpi-title" style="margin-bottom:5px;">{_("kpi_activity")}</div>
         <div class="heatmap-inner-wrapper">
             <div>
                 <div class="heatmap-grid">
@@ -751,7 +757,7 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
     with c_trend:
         # Wrap Trend in Streamlit Container for consistent styling
         with st.container(border=True):
-            st.markdown('<div class="kpi-title" style="margin-bottom:15px;">📉 支出趋势 (Trend)</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="kpi-title" style="margin-bottom:15px;">📉 {_( "tab_trend" )}</div>', unsafe_allow_html=True)
             
             tz = pytz.timezone("Asia/Shanghai")
             this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
@@ -763,13 +769,13 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
                 daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
                 if not daily_trend.empty:
                     fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
-                    fig.update_traces(hovertemplate="%{x}<br>有效金额: " + user_currency + "%{y:,.2f}<extra></extra>")
+                    fig.update_traces(hovertemplate="%{x}<br>" + user_currency + "%{y:,.2f}<extra></extra>")
                     fig.update_layout(
                         paper_bgcolor="rgba(0,0,0,0)", 
                         plot_bgcolor="rgba(0,0,0,0)", 
-                        margin=dict(l=0, r=0, t=0, b=0),
-                        xaxis=dict(showgrid=False, tickfont=dict(color="#888")),
-                        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
+                        margin=dict(l=0, r=0, t=10, b=0),
+                        xaxis=dict(showgrid=False, tickfont=dict(color="#888"), title=None),
+                        yaxis=dict(showgrid=True, gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888"), title=None),
                         height=230 # Reduced to 230 to match Heatmap 270px total
                     )
                     st.plotly_chart(fig, use_container_width=True, config={"staticPlot": is_mobile})
@@ -779,7 +785,7 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
                  st.info("无数据")
 
     # Recent Records (Grouped)
-    st.markdown('<div class="kpi-title" style="margin-top:20px; margin-bottom:15px;">🕒 最近记录 (Recent)</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi-title" style="margin-top:20px; margin-bottom:15px;">🕒 {_( "dash_recent_records" )}</div>', unsafe_allow_html=True)
     
     if not df.empty:
         # Sort and Group
@@ -795,7 +801,7 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
         user = st.session_state.get("user")
         user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
         
-        for _, row in df_sorted.iterrows():
+        for idx, row in df_sorted.iterrows():
             d_str = pd.to_datetime(row["日期"]).strftime("%Y-%m-%d")
             
             # Determine Group Header
@@ -816,6 +822,7 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
             icon = icon_map.get(cat, "💰")
             
             # Render Row
+            cat_display = _(f"cat_{cat}")
             st.markdown(f"""
             <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; background:#121212; border-radius:12px; margin-bottom:8px; border:1px solid #2A2A2A;">
                 <div style="display:flex; align-items:center; gap:12px;">
@@ -824,7 +831,7 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
                     </div>
                     <div>
                         <div style="color:#eee; font-weight:500;">{row['项目']}</div>
-                        <div style="color:#666; font-size:0.8rem;">{cat} • {row.get('备注','')}</div>
+                        <div style="color:#666; font-size:0.8rem;">{cat_display} • {row.get('备注','')}</div>
                     </div>
                 </div>
                 <div style="color:#FF4B4B; font-weight:600;">-{user_currency}{row['有效金额']:,.0f}</div>
@@ -832,22 +839,22 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
             """, unsafe_allow_html=True)
             
     else:
-        st.caption("无最近记录")
+        st.caption(_("dash_no_records"))
                 
 def render_analysis(df, services, supabase, is_mobile=False):
     render_top_navigation(df, services, supabase, is_mobile=is_mobile)
-    st.header("深度分析")
+    st.header(_("dash_analysis"))
     
     # === Budget Progress Section (Visuals & Link to Management) ===
     with st.container(border=True):
         c_title, c_link = st.columns([5, 1])
         with c_title:
-            st.subheader("📊 预算详情 (Budget Breakdown)")
+            st.subheader(_("tab_budget_breakdown"))
         with c_link:
             st.button(
-                "⚙️ 管理", 
+                _("btn_manage_budget"), 
                 key="goto_budget_manage", 
-                help="管理预算",
+                help=_("btn_manage_budget"),
                 use_container_width=True,
                 on_click=navigate_to,
                 args=("Budgets",)
@@ -857,7 +864,7 @@ def render_analysis(df, services, supabase, is_mobile=False):
     
     c1, c2 = st.columns(2)
     with c1:
-        st.subheader("分类占比 (Category)")
+        st.subheader(_("tab_category_ratio"))
         if not df.empty and "分类" in df.columns:
              # Prepare Data with Icons
              icon_map = {
@@ -877,7 +884,7 @@ def render_analysis(df, services, supabase, is_mobile=False):
                  textinfo='percent+label', 
                  textposition='inside', 
                  textfont_color="white",
-                 hovertemplate="%{label}<br>有效金额: " + user_currency + "%{value:,.2f}<extra></extra>"
+                 hovertemplate="%{label}<br>" + user_currency + "%{value:,.2f}<extra></extra>"
              )
              fig.update_layout(
                  paper_bgcolor="rgba(0,0,0,0)", 
@@ -892,7 +899,7 @@ def render_analysis(df, services, supabase, is_mobile=False):
              st.plotly_chart(fig, use_container_width=True, config={"staticPlot": is_mobile})
              
     with c2:
-        st.subheader("月度对比 (Monthly)")
+        st.subheader(_("tab_monthly"))
         if not df.empty and "月(yyyy-mm)" in df.columns:
             user = st.session_state.get("user")
             user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
@@ -903,23 +910,24 @@ def render_analysis(df, services, supabase, is_mobile=False):
                 marker_color='#2F80ED', 
                 marker_line_width=0, 
                 textfont_color="#fff",
-                hovertemplate="%{x}<br>有效金额: " + user_currency + "%{y:,.2f}<extra></extra>"
+                hovertemplate="%{x}<br>" + user_currency + "%{y:,.2f}<extra></extra>"
             )
             fig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", 
                 plot_bgcolor="rgba(0,0,0,0)",
-                yaxis=dict(gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888")),
-                xaxis=dict(tickfont=dict(color="#888"))
+                yaxis=dict(gridcolor="rgba(255,255,255,0.05)", tickfont=dict(color="#888"), title=None),
+                xaxis=dict(tickfont=dict(color="#888"), title=None),
+                margin=dict(t=10, b=0, l=0, r=0)
             )
             st.plotly_chart(fig, use_container_width=True, config={"staticPlot": is_mobile})
 
 def render_subscriptions(df, services, supabase, is_mobile=False):
     render_top_navigation(df, services, supabase, is_mobile=is_mobile)
-    st.header("订阅管理 (Subscriptions)")
+    st.header(_("pg_subscriptions"))
     
     rules = services.get_recurring_rules(supabase)
     if not rules:
-        st.info("暂无订阅信息，请点击右上角 '+' 按钮添加。")
+        st.info(_("sub_no_info"))
         rules = []
 
     user = st.session_state.get("user")
@@ -932,44 +940,44 @@ def render_subscriptions(df, services, supabase, is_mobile=False):
                     
     c1, c2 = st.columns(2)
     with c1:
-        st.metric("月度固定支出 (Est. Monthly)", f"{user_currency}{total_monthly:,.2f}")
+        st.metric(_("sub_metric_monthly"), f"{user_currency}{total_monthly:,.2f}")
     with c2:
-        st.metric("活跃订阅数 (Active Subs)", f"{len(rules)}")
+        st.metric(_("sub_metric_active"), f"{len(rules)}")
         
     st.divider()
     
     # 2. Add New Subscription
-    with st.expander("➕ 添加新订阅 (Add New Subscription)", expanded=False):
+    with st.expander(_("sub_add_new"), expanded=False):
         with st.form("sub_page_add"):
             c_name, c_cat = st.columns(2)
-            r_name = c_name.text_input("名称 (Name)", placeholder="Netflix, Spotify...")
-            r_cat = c_cat.selectbox("分类", CATEGORIES)
+            r_name = c_name.text_input(_("sub_form_name"), placeholder=_("sub_form_name_placeholder"))
+            r_cat = c_cat.selectbox(_("col_category"), options=CATEGORIES, format_func=lambda x: _(f"cat_{x}"))
             
             c_amt, c_freq = st.columns(2)
-            r_amt = c_amt.number_input(f"金额 ({user_currency})", min_value=0.0, step=1.0)
-            r_freq = c_freq.selectbox("周期", ["Monthly", "Weekly", "Yearly"])
+            r_amt = c_amt.number_input(f"{_('sub_form_amount')} ({user_currency})", min_value=0.0, step=1.0)
+            r_freq = c_freq.selectbox(_("sub_form_freq"), ["Monthly", "Weekly", "Yearly"], format_func=lambda x: _(f"freq_{x}"))
             
             tz = pytz.timezone("Asia/Shanghai")
-            r_date = st.date_input("首次/下次扣款日期", value=pd.Timestamp.now(tz=tz))
+            r_date = st.date_input(_("sub_form_date"), value=pd.Timestamp.now(tz=tz))
             
-            if st.form_submit_button("确认添加", type="primary", use_container_width=True):
+            if st.form_submit_button(_("sub_btn_add"), type="primary", use_container_width=True):
                 services.add_recurring(supabase, st.session_state["user"].id, r_name, r_amt, r_cat, r_freq, r_date)
-                st.success(f"已添加: {r_name}")
+                st.success(_("sub_msg_added").format(name=r_name))
                 st.rerun()
 
     # 3. List
-    st.subheader("订阅列表")
+    st.subheader(_("sub_list_header"))
     if rules:
         df_rules = pd.DataFrame(rules)
         df_rules["delete"] = False
         
         r_cfg = {
-            "name": st.column_config.TextColumn("名称", required=True, width="medium"),
-            "amount": st.column_config.NumberColumn(f"金额 ({user_currency})", format=f"{user_currency}%.2f", width="small"),
-            "day": st.column_config.NumberColumn("日/W", min_value=0, max_value=31, width="small", help="每月几号或每周几"),
+            "name": st.column_config.TextColumn(_("col_sub_name"), required=True, width="medium"),
+            "amount": st.column_config.NumberColumn(f"{_('col_amount')} ({user_currency})", format=f"{user_currency}%.2f", width="small"),
+            "day": st.column_config.NumberColumn(_("col_sub_day"), min_value=0, max_value=31, width="small", help=_("col_sub_day_help")),
             "delete": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
-            "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="small"),
-            "frequency": st.column_config.SelectboxColumn("周期", options=["Monthly", "Weekly", "Yearly"], width="small"),
+            "category": st.column_config.SelectboxColumn(_("col_category"), options=CATEGORIES, width="small"),
+            "frequency": st.column_config.SelectboxColumn(_("sub_form_freq"), options=["Monthly", "Weekly", "Yearly"], width="small"),
             "id": None, "user_id": None, "active": None, "created_at": None, "last_triggered": None
         }
 
@@ -982,8 +990,8 @@ def render_subscriptions(df, services, supabase, is_mobile=False):
             num_rows="dynamic"
         )
         
-        col_btn, _ = st.columns([1, 2])
-        if col_btn.button("💾 保存更改 (Save Changes)", type="primary", use_container_width=True):
+        col_btn, _empty = st.columns([1, 2])
+        if col_btn.button(_("btn_save_changes"), type="primary", use_container_width=True):
                  # Deletes
                  to_delete_r = edited_r[edited_r["delete"] == True]
                  for idx, row in to_delete_r.iterrows(): services.delete_recurring(supabase, row["id"])
@@ -1006,21 +1014,21 @@ def render_subscriptions(df, services, supabase, is_mobile=False):
                               })
                           except: pass
                  
-                 st.success("✅ 订阅已更新")
+                 st.success(_("msg_sub_updated"))
                  time.sleep(1)
                  st.cache_data.clear()
                  st.rerun()
 
 def render_transactions(df, services, supabase, is_mobile=False):
     render_top_navigation(df, services, supabase, is_mobile=is_mobile)
-    st.header("所有交易")
+    st.header(_("pg_transactions"))
     
     # Filter Toolbar
     c1, c2, c3 = st.columns([1, 1, 2])
     with c1: 
-        filter_cat = st.multiselect("分类筛选", options=CATEGORIES, placeholder="全部分类")
+        filter_cat = st.multiselect(_("tx_filter_cat"), options=CATEGORIES, format_func=lambda x: _(f"cat_{x}"), placeholder=_("tx_filter_placeholder"))
     with c2:
-        search = st.text_input("搜索", placeholder="搜索项目...")
+        search = st.text_input(_("tx_search"), placeholder=_("tx_search_placeholder"))
         
     df_show = df.copy()
     if filter_cat:
@@ -1029,7 +1037,7 @@ def render_transactions(df, services, supabase, is_mobile=False):
         df_show = df_show[df_show["项目"].str.contains(search, case=False) | df_show["备注"].str.contains(search, case=False)]
         
     # Data Editor
-    st.caption(f"共找到 {len(df_show)} 条记录")
+    st.caption(_("tx_found_records").format(count=len(df_show)))
     
     edit_cols = ["删除", "日期", "项目", "金额", "分类", "备注", "id"]
     df_show["删除"] = False
@@ -1039,11 +1047,11 @@ def render_transactions(df, services, supabase, is_mobile=False):
 
     col_cfg = {
         "删除": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
-        "日期": st.column_config.DateColumn("日期", width="medium"),
-        "项目": st.column_config.TextColumn("项目", width="large"),
-        "金额": st.column_config.NumberColumn(f"金额 ({user_currency})", format=f"{user_currency}%.2f", width="small"),
-        "分类": st.column_config.SelectboxColumn("分类", options=CATEGORIES, width="medium"),
-        "备注": st.column_config.TextColumn("备注", width="large"),
+        "日期": st.column_config.DateColumn(_("col_date"), width="medium"),
+        "项目": st.column_config.TextColumn(_("col_item"), width="large"),
+        "金额": st.column_config.NumberColumn(_("col_amount") + f" ({user_currency})", format=f"{user_currency}%.2f", width="small"),
+        "分类": st.column_config.SelectboxColumn(_("col_category"), options=CATEGORIES, width="medium"),
+        "备注": st.column_config.TextColumn(_("col_note"), width="large"),
         "id": None
     }
     
@@ -1056,12 +1064,12 @@ def render_transactions(df, services, supabase, is_mobile=False):
             num_rows="fixed",
             height=600
         )
-        if st.form_submit_button("💾 保存更改 (Save Changes)", type="primary"):
+        if st.form_submit_button(_("btn_save_changes"), type="primary"):
             # Update Logic (Simplified reuse)
             to_delete = edited[edited["删除"] == True]
             for id_val in to_delete["id"]: services.delete_expense(supabase, id_val)
             
-            st.success("操作已提交")
+            st.success(_("msg_op_success"))
             time.sleep(1)
             st.cache_data.clear()
             st.rerun()
@@ -1278,41 +1286,24 @@ def render_chat(df, services, supabase, user, is_mobile=False):
 
 def render_budgets(df, services, supabase, user, is_mobile=False):
     render_top_navigation(df, services, supabase, is_mobile=is_mobile)
-    st.header("预算管理 (Budgets)")
+    st.header(_("pg_budgets"))
     
     user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
     
     # === 1. Budget Breakdown (Visuals) ===
-    with st.container(border=True):
-        st.subheader("📊 预算详情 (Budget Breakdown)")
-        
-        budgets = services.get_budgets(supabase)
-        tz = pytz.timezone("Asia/Shanghai")
-        this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
-        
-        if budgets:
-            # Prepare data
-            df_budget_calc = df.copy()
-            if "月(yyyy-mm)" in df_budget_calc.columns:
-                df_budget_calc = df_budget_calc[df_budget_calc["月(yyyy-mm)"] == this_month]
-            
-            # Grid layout for budgets
-    # === 1. Budget Breakdown (Visuals) ===
-    with st.container(border=True):
-        st.subheader("📊 预算详情 (Budget Breakdown)")
-        render_budget_cards(df, services, supabase)
+    render_budget_cards(df, services, supabase)
     
     st.divider()
 
     # === 2. Budget Management (Edit) ===
-    st.subheader("⚙️ 管理预算 (Manage)")
+    st.subheader(_("budget_manage_header"))
     
     # Add New Budget (Popover)
-    with st.popover("➕ 添加新预算 (Add Budget)", use_container_width=True):
+    with st.popover(_("sub_add_new"), use_container_width=True):
         with st.form("v2_add_budget_page"):
-            b_cat = st.selectbox("分类", CATEGORIES, key="v2_b_cat_page")
-            b_amt = st.number_input(f"限额 ({user_currency})", min_value=0, step=100, key="v2_b_amt_page")
-            if st.form_submit_button("确认添加", type="primary", use_container_width=True):
+            b_cat = st.selectbox(_("col_category"), CATEGORIES, key="v2_b_cat_page")
+            b_amt = st.number_input(f"{_('col_amount')} ({user_currency})", min_value=0, step=100, key="v2_b_amt_page")
+            if st.form_submit_button(_("sub_btn_add"), type="primary", use_container_width=True):
                 icon_map = {"餐饮":"🍔", "交通":"🚗", "日用品":"🛒", "服饰":"👔", "娱乐":"🎮", "医疗":"💊", "居住":"🏠", "其他":"📦"}
                 icon = icon_map.get(b_cat, "💰")
                 services.add_budget(supabase, user.id, f"{b_cat}预算", b_cat, b_amt, "#2F80ED", icon)
@@ -1328,8 +1319,8 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
         df_budgets["delete"] = False
         
         b_cfg = {
-            "category": st.column_config.SelectboxColumn("分类", options=CATEGORIES, required=True, width="medium"),
-            "amount": st.column_config.NumberColumn(f"限额 ({user_currency})", min_value=0, step=100, format=f"{user_currency}%d"),
+            "category": st.column_config.SelectboxColumn(_("col_category"), options=CATEGORIES, required=True, width="medium"),
+            "amount": st.column_config.NumberColumn(f"{_('col_amount')} ({user_currency})", min_value=0, step=100, format=f"{user_currency}%d"),
             "delete": st.column_config.CheckboxColumn("🗑️", width="small", default=False),
             "name": None, "id": None, "user_id": None, "icon": None, "color": None, "created_at": None
         }
@@ -1343,7 +1334,7 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
             num_rows="dynamic"
         )
         
-        if st.button("💾 保存预算 (Save Budgets)", key="v2_save_budgets_page", type="primary", use_container_width=True):
+        if st.button(_("budget_btn_save"), key="v2_save_budgets_page", type="primary", use_container_width=True):
             # Handle Deletes
             to_delete = edited_b[edited_b["delete"] == True]
             for idx, row in to_delete.iterrows():
@@ -1362,7 +1353,7 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
                             services.update_budget(supabase, row["id"], {"category": row["category"], "amount": float(row["amount"])})
                         except: pass
             
-            st.success("✅ 预算已更新")
+            st.success(_("budget_msg_updated"))
             time.sleep(1)
             st.cache_data.clear()
             st.rerun()
@@ -1433,7 +1424,7 @@ def render_settings(supabase, user, is_mobile=False):
             }
             
             [data-testid="stFileUploader"] button::before {
-                content: "上传头像图案";
+                content: "{_('settings_avatar_btn_text')}";
                 font-size: 0.95rem; /* Restore custom text size */
                 visibility: visible !important; 
                 display: block !important;
@@ -1442,9 +1433,60 @@ def render_settings(supabase, user, is_mobile=False):
             /* Softer divider */
             hr { margin-top: 2rem !important; margin-bottom: 2rem !important; border-color: rgba(255,255,255,0.1) !important; }
             
+            /* Global Uploader Translation (Forcefully overrides internal labels) */
+            [data-testid="stFileUploader"] label {
+                visibility: hidden !important;
+                height: 0 !important;
+                margin: 0 !important;
+            }
+            [data-testid="stFileUploader"] section > div:first-child > span {
+                visibility: hidden !important;
+                position: relative;
+            }
+            [data-testid="stFileUploader"] section > div:first-child > span::before {
+                content: "{_('uploader_drag_drop')}";
+                visibility: visible !important;
+                position: absolute;
+                left: 0; top: 0;
+                width: 300px;
+                color: #aaa;
+            }
+            /* Desktop Button (only if not mobile specific pattern) */
+            [data-testid="stFileUploader"] button span {
+                display: none !important;
+            }
+            [data-testid="stFileUploader"] button::after {
+                content: "{_('uploader_browse')}";
+                visibility: visible !important;
+                display: block !important;
+            }
+            
             /* Adjust uploader elements */
             [data-testid="stFileUploader"] { margin-top: -10px; padding-left: 10px; }
             [data-testid="stSelectbox"] { margin-top: -10px; }
+        </style>
+        """, unsafe_allow_html=True)
+    else:
+        # Standard Desktop CSS for Uploader
+        st.markdown(f"""
+        <style>
+            [data-testid="stFileUploader"] section > div:first-child > span {{
+                visibility: hidden !important;
+                position: relative;
+            }}
+            [data-testid="stFileUploader"] section > div:first-child > span::before {{
+                content: "{_('uploader_drag_drop')}";
+                visibility: visible !important;
+                position: absolute;
+                left: 0;
+            }}
+            [data-testid="stFileUploader"] button span {{
+                display: none !important;
+            }}
+            [data-testid="stFileUploader"] button::after {{
+                content: "{_('uploader_browse')}";
+                visibility: visible !important;
+            }}
         </style>
         """, unsafe_allow_html=True)
 
@@ -1522,8 +1564,8 @@ def render_settings(supabase, user, is_mobile=False):
         current_currency = matched
 
     with st.form("currency_form"):
-        selected_cu = st.selectbox("选择货币 (Select Currency)", options=cu_options, index=cu_options.index(current_currency))
-        if st.form_submit_button("保存货币设置 (Save)", type="primary"):
+        selected_cu = st.selectbox(_("settings_cur_select"), options=cu_options, index=cu_options.index(current_currency))
+        if st.form_submit_button(_("settings_cur_save"), type="primary"):
             try:
                 # We save the full string so the dropdown remembers exactly
                 # But we'll extract the first character as the absolute symbol when rendering
@@ -1554,7 +1596,7 @@ def render_settings(supabase, user, is_mobile=False):
     
     with st.form("language_form"):
         selected_lang_display = st.selectbox(
-            "Language / 语言", 
+            _("settings_lang_label"), 
             options=list(lang_options.values()), 
             index=list(lang_options.values()).index(current_lang_display)
         )
@@ -1578,19 +1620,19 @@ def render_settings(supabase, user, is_mobile=False):
                     time.sleep(0.5)
                     st.rerun()
                 else:
-                    st.info("Language unchanged.")
+                    st.info(_("settings_lang_unchanged"))
             except Exception as e:
                 st.error(f"Error saving language: {e}")
 
     if not is_mobile:
         st.divider()
-        st.subheader("🔑 OpenAI API Key (选填)")
-        st.caption("填入您自己的 OpenAI API Key 以启用智能对话和自动记账功能。此 Key 仅保存在您的个人元数据中。")
+        st.subheader(_("settings_openai_title"))
+        st.caption(_("settings_openai_caption"))
         
         current_key = user.user_metadata.get("openai_api_key", "")
         with st.form("api_key_form"):
-            new_key = st.text_input("OpenAI API Key (sk-...)", value=current_key, type="password")
-            if st.form_submit_button("保存 Key (Save)", type="primary"):
+            new_key = st.text_input(_("settings_openai_placeholder"), value=current_key, type="password")
+            if st.form_submit_button(_("settings_openai_save"), type="primary"):
                 try:
                     # Update user metadata
                     supabase.auth.update_user({"data": {"openai_api_key": new_key}})
@@ -1602,7 +1644,7 @@ def render_settings(supabase, user, is_mobile=False):
                     time.sleep(1)
                     st.rerun()
                 except Exception as e:
-                    st.error(f"保存失败: {e}")
+                    st.error(f"{_('settings_avatar_error_upload').split(':')[0]}: {e}")
 
     st.divider()
     if st.button(_("settings_logout"), type="secondary", use_container_width=True):
@@ -1673,18 +1715,18 @@ def render_unified_kpi_card(df, services, supabase):
 <div class="kpi-card-v4">
     <div class="kpi-top-section">
         <div class="kpi-label-row">
-             <span style="font-size: 1.1rem;">🗓️</span> <span>本月支出 (Month Spend)</span>
+             <span style="font-size: 1.1rem;">🗓️</span> <span>{_('kpi_expense')}</span>
         </div>
         <div class="kpi-main-value">{user_currency}{month_total:,.2f}</div>
     </div>
     <div class="kpi-divider"></div>
     <div class="kpi-bottom-section">
         <div class="kpi-sub-item">
-            <div class="kpi-sub-label" style="justify-content: flex-start;"><span style="font-size: 1rem; margin-right: 4px;">💰</span> 剩余预算 (Remaining)</div>
+            <div class="kpi-sub-label" style="justify-content: flex-start;"><span style="font-size: 1rem; margin-right: 4px;">💰</span> {_('kpi_balance')}</div>
             <div class="kpi-sub-value" style="text-align: left;">{user_currency}{left:,.2f}</div>
         </div>
         <div class="kpi-sub-item text-right">
-            <div class="kpi-sub-label" style="justify-content: flex-start;">活跃订阅 (Subs) <span style="font-size: 1rem; margin-left: 4px;">🔄</span></div>
+            <div class="kpi-sub-label" style="justify-content: flex-start;">{_('kpi_subs')} <span style="font-size: 1rem; margin-left: 4px;">🔄</span></div>
             <div class="kpi-sub-value" style="text-align: left;">{active_subs}</div>
         </div>
     </div>
@@ -2034,7 +2076,7 @@ def render(supabase):
             logo_url = user.user_metadata.get("avatar_url")
         
         st.image(logo_url, width=100)
-        st.markdown(f"### 智能记账小助手")
+        # st.markdown(f"### 智能记账小助手") # Removed as requested
         st.divider()
         page = render_sidebar_nav()
         st.divider()

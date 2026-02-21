@@ -1,10 +1,27 @@
 # Changelog
 
+## [V3.7] - 2026-02-21
+### Full Localization & UI Purification
+- **100% i18n Coverage**: Implemented a comprehensive translation system (JSON-based) covering all UI labels, form fields, buttons, and AI assistant responses.
+- **CSS-Injected Translation**: Bypassed Streamlit's hardcoded limitations to localize the File Uploader component ("Drag and drop", "Browse files").
+- **Minimalist Chart UI**: Purified chart visuals by removing redundant axis titles ("Amount", "Date") and cleaning up hover popup information globally.
+- **Sidebar UX Refinement**: Restructured the sidebar to remove redundant titles and localized the AI Smart Assistant header.
+- **Form & Validation i18n**: Fully localized error messages, success banners, and selection frequencies (Monthly, Weekly, Yearly) in all management views.
+
 ## [V3.6] - 2026-02-20
 ### Global Multi-Currency Support & AI Optimization
 - **Dynamic Currency Selector**: Users can now select their preferred currency (e.g., USD, CNY, EUR, THB) from the Settings page. This preference is permanently stored in Supabase `user_metadata`.
-- **UI Currency Injection**: All Dashboard KPI cards, Heatmaps, Budget progress bars, and data tables now dynamically render the user's selected symbol instead of hardcoded USD/CNY.
 - **AI Exchange Rate Engine**: Re-engineered the `SYSTEM_PROMPT` in `expense_chat.py` to enforce the user's primary currency in all money-related replies, whilst granting the AI explicit permission to calculate real-time exchange rate estimates when cross-currency queries are asked.
+- **UI Currency Injection**: All Dashboard KPI cards, Heatmaps, Budget progress bars, and data tables now dynamically render the user's selected symbol instead of hardcoded USD/CNY.
+
+## ARCHITECTURE
+- **`modules/`**: Contains all reusable logic and UI components.
+    - `auth.py`: Handles login/signup/session.
+    - `services.py`: Handles all database interactions.
+    - `ui_v2.py`: Handles all rendering and frontend styling, including CSS-based component overrides.
+    - `i18n.py`: **[NEW]** Centralized translation engine for multi-language support.
+- **`locales/`**: **[NEW]** JSON dictionaries for internationalization (`zh.json`, `en.json`).
+- **`app.py`**: Minimalist entry point, acting as a router.
 
 ## [V3.5] - 2026-02-19
 ### Professional UI & Robust Rendering
