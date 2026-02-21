@@ -1486,7 +1486,6 @@ def render_settings(supabase, user, is_mobile=False):
                      {"upsert": "true", "content-type": content_type}
                  )
                  
-                 import time
                  # Get Public URL and update metadata with cache-busting timestamp
                  base_public_url = supabase.storage.from_("avatars").get_public_url(file_path)
                  public_url = f"{base_public_url}?t={int(time.time())}"
