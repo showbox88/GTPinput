@@ -7,6 +7,8 @@ import datetime
 import pytz
 import modules.services as services
 import modules.utils as utils
+import modules.i18n as i18n
+from modules.i18n import _
 import streamlit.components.v1 as components
 
 # Optional imports
