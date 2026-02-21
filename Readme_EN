@@ -1,8 +1,127 @@
+# GTPinput 💰
+**GPT-Powered Smart Expense Tracker**
+
+This is a full-stack personal finance system powered by GPT, featuring natural language recording, auto-classification, real-time aggregation, automated recurring payments, monthly budget management, and a mobile/desktop-friendly visual dashboard built with Streamlit.
+
+**System Features**:
+- **Recording**: Streamlit Chat UI (Input) -> OpenAI (Parsing) -> Cloudflare Worker (API) -> D1 Database
+- **Documents**: Streamlit File Uploader -> OpenAI (Vision) -> Google Drive/Sheets/Calendar (Archiving)
+
+---
+
+## 🚀 Evolution Timeline
+
+### v3.7 Localization & Minimalism [Latest]
+- **100% i18n Support**: New `locales/` architecture for seamless switching between Chinese and English. Full translation coverage from sidebars to AI responses.
+- **CSS Hacking (UI Cleanup)**: Overrode Streamlit's default File Uploader labels ("Drag and drop", "Browse files") with localized Chinese/English tags via CSS injection.
+- **Purified Charts**: Removed redundant axis titles ("Amount", "Date") and cleaned up hover popup information globally.
+- **Sidebar Refinement**: Reorganized avatar and title layout, removing redundant static titles in favor of dynamic localized headers.
+
+### v3.6 Mobile Deep Optimization & SaaS Architecture
+- **Global Multi-Currency**: Support for global currency settings (CNY, USD, EUR, etc.) with instant symbol conversion across the dashboard.
+- **AI Exchange Engine**: Smart assistant can perform cross-currency conversion estimates using its internal knowledge base.
+- **New Bottom Navigation**: Native App-style 3-button floating navigation bar to maximize screen space on mobile.
+- **Immersive Experience**: Globally hidden Streamlit's default menus and footers for a pure app feel.
+- **Mobile Settings Center**: Custom folder icons (`📁`) with gradients for a premium touch interface.
+
+### v3.5 Professional UI & Stability
+- **Unified KPI Card V3**: Glassmorphism design, text gradients, and financial-grade typography.
+- **Rendering Fixes**: Resolved Markdown parsing errors caused by HTML indentation.
+- **Adaptive Spacing**: Dynamic margin adjustments for mobile, with isolated rendering logic for desktop and mobile stability.
+
+### v3.4 Visual Overhaul
+- **Card Redesign**: Professional Dark Blue header + Dark Timeline footer design.
+- **Smart Progress Bars**: 40px rounded design with dynamic **�Healthy / 🟠Warning / 🔴Over-budget** status colors.
+- **Today Indicator**: Real-time display of the current date on the monthly timeline.
+- **Daily Advice**: Automatic calculation of recommended daily spending based on remaining days.
+
+### v3.3 GPT Advanced Actions
+- **Beyond Recording**: Granted GPT permission to **Delete** and **Modify** records.
+- **Natural Language Ops**: Support for "Delete yesterday's taxi expense", "Change rent to 2600", "How much did I spend last week?".
+- **Smart Note System**: Automatic origin tagging: 💬 App Assistant, 🤖 External GPT, 🔄 Auto-Subscription.
+
+### v3.2 Responsive Layout & Experience Upgrades
+- **Responsive Design**: Automatic adaptation for wide screens and mobile devices.
+- **Enhanced Subscriptions**: Support for **Weekly** cycles and integrated Calendar Date Picker.
+- **Explicit Delete**: Added independent **Delete** checkboxes in management views for safer operations.
+
+### v3.1 Performance & Interaction
+- **🔐 Persistent Login**: "Remember Me" option with local `.session_cache`.
+- **🔄 Manual Refresh**: Sidebar refresh button for real-time synchronization.
+- **UX Polish**: New "Thinking..." animation and improved sorting logic.
+
+### v3.0 Core Foundation
+- **Monthly Budgets**: Automated rotation, visual progress bars, and Emoji icon arrays.
+- **Recurring Expenses**: Automated cron-based recording for rent and subscriptions.
+- **Basic Dashboard**: KPI overview, trend line charts, and category pie charts.
+- **SmartDoc Integration**: Receipts OCR and Google Drive/Sheets/Calendar synchronization.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    User(User/GPT) -->|Voice/Text| API(Supabase Edge Function)
+    API -->|SQL| DB[(Supabase Database)]
+    Streamlit(Streamlit Dashboard) -->|GET /list| API
+    Streamlit -->|POST /update| API
+    Streamlit -->|POST /delete| API
+    API -->|JSON| Streamlit
+```
+
+---
+
+## 🛠️ API Endpoints (Supabase Edge Function)
+
+All operations are handled via Supabase Functions. Custom GPT uses no-auth via `--no-verify-jwt`.
+
+### Core Accounting
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/add` | Natural Language Entry (GPT parsed) |
+| `GET` | `/list` | Get recent records |
+| `POST` | `/update` | Modify record by ID |
+| `POST` | `/delete` | Delete record by ID |
+
+---
+
+## 📂 File Structure
+
+```text
+├── locales/             # JSON dictionaries (zh.json, en.json)
+├── modules/             # Python modules (UI, Services, Auth, i18n)
+├── .streamlit/          # Streamlit config (secrets.toml)
+├── assets/              # Static assets (Logos, Icons)
+├── scripts/             # Automation scripts (Cron Jobs)
+├── app.py               # Main Entry Point
+├── requirements.txt     # Python Dependencies
+└── supabase_setup.sql   # DB Initialization Script
+```
+
+---
+
+## 🖥️ Deployment Guide
+
+### 1. Supabase Edge Function
+```bash
+npx supabase functions deploy gpt-api --no-verify-jwt
+```
+
+### 2. Custom GPT
+1. Create a new GPT.
+2. Import `openapi_supabase.json` into Actions.
+3. Authentication: `None`.
+
+### 3. Streamlit Dashboard
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
 
 ---
 
 ## 🔮 Future Roadmap
-
-- [ ] Budgeting limits and alerts.
 - [ ] Export data to CSV/Excel.
-- [ ] Multi-user support.
+- [ ] Multi-user enhancements and more currency pairs.
+- [ ] AI-generated annual financial reports.
