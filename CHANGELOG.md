@@ -1,5 +1,12 @@
 # Changelog
 
+## [V3.8] - 2026-02-21
+### Dynamic i18n & Multi-Language Expansion
+- **Dynamic Locale Engine**: Re-engineered `i18n.py` to automatically detect translation files in the `locales/` folder, allowing for plug-and-play language expansion.
+- **Multi-Language Rollout**: Added comprehensive translation packs for **Japanese (ja)**, **Spanish (es)**, and **French (fr)**.
+- **Category Localization**: Synchronized all category dropdowns (CATEGORIES) in Budget and Subscription views to translate based on the active session language.
+- **Robust Fallbacks**: Enhanced the i18n engine to safely ignore corrupted/missing JSON files and fallback to default keys without crashing.
+
 ## [V3.7] - 2026-02-21
 ### Full Localization & UI Purification
 - **100% i18n Coverage**: Implemented a comprehensive translation system (JSON-based) covering all UI labels, form fields, buttons, and AI assistant responses.

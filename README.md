@@ -11,7 +11,12 @@
 
 ## 🚀 进化历程 (Evolution Timeline)
 
-### v3.7 全球化与极简主义 (Localization & Minimalism) [Latest]
+### v3.8 动态全球化 (Dynamic Globalization) [Latest]
+- **动态语言检测**: 系统现在会自动扫描 `locales/` 目录。只需添加 `.json` 文件并设置 `_lang_display_name`，即可在界面中自动显示新语言，无需修改代码。
+- **五国语言包**: 补齐了 **日语 (ja)**、**西班牙语 (es)** 和 **法语 (fr)** 的全量翻译，实现了中、英、日、西、法五路并行。
+- **分类名同步翻译**: 预算管理与订阅管理中的分类下拉菜单（餐饮、交通等）现在会根据系统语言自动切换显示。
+
+### v3.7 全球化与极简主义 (Localization & Minimalism)
 - **100% 国际化支持 (i18n)**：全新的 `locales/` 架构，支持中英文一键无缝切换。从侧边栏、表单标签到 AI 的回复，实现了真正的全站闭环翻译。
 - **CSS 深度破解 (UI Cleanup)**：通过 CSS 注入技术破解了 Streamlit 默认的文件上传组件，成功汉化了写死的 “Drag and drop” 和 “Browse files” 标签。
 - **极简画质图表**：清除了折线图和柱状图多余的轴标题及 Hover Popup 中的冗余前缀。

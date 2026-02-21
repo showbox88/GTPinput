@@ -11,7 +11,12 @@ This is a full-stack personal finance system powered by GPT, featuring natural l
 
 ## 🚀 Evolution Timeline
 
-### v3.7 Localization & Minimalism [Latest]
+### v3.8 Dynamic Globalization [Latest]
+- **Dynamic Language Detection**: The system now automatically scans the `locales/` directory. Simply adding a `.json` file with a `_lang_display_name` field will register the new language in the UI without any code changes.
+- **5-Language Support**: Expanded coverage with full translation packs for **Japanese (ja)**, **Spanish (es)**, and **French (fr)**, alongside Chinese and English.
+- **Category Localization**: Budget and subscription category dropdowns now synchronize with the global language setting (e.g., "Dining" -> "食費" / "Repas").
+
+### v3.7 Localization & Minimalism
 - **100% i18n Support**: New `locales/` architecture for seamless switching between Chinese and English. Full translation coverage from sidebars to AI responses.
 - **CSS Hacking (UI Cleanup)**: Overrode Streamlit's default File Uploader labels ("Drag and drop", "Browse files") with localized Chinese/English tags via CSS injection.
 - **Purified Charts**: Removed redundant axis titles ("Amount", "Date") and cleaned up hover popup information globally.
