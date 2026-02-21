@@ -1488,7 +1488,7 @@ def render_settings(supabase, user, is_mobile=False):
                  
                  # Get Public URL and update metadata with cache-busting timestamp
                  base_public_url = supabase.storage.from_("avatars").get_public_url(file_path)
-                 public_url = f"{base_public_url}?t={int(time.time())}"
+                 public_url = f"{base_public_url}?t={int(datetime.datetime.now().timestamp())}"
                  supabase.auth.update_user({"data": {"avatar_url": public_url}})
                  
                  # Refresh session state
@@ -1497,7 +1497,7 @@ def render_settings(supabase, user, is_mobile=False):
                      st.session_state["user"] = auth_res.user
                      
                  st.success("✅ 您的专属个人 Logo 已成功上传至云端并生效!")
-                 time.sleep(1)
+                 # Removed time.sleep to avoid any possible time module scope issues
                  
                  # Dynamically change the uploader key to force Streamlit to completely unmount and reset it
                  st.session_state['avatar_upload_count'] = st.session_state.get('avatar_upload_count', 0) + 1
