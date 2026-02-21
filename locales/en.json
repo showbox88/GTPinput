@@ -105,7 +105,7 @@
     "settings_openai_caption": "Enter your own OpenAI API Key to enable AI chat and auto-expense tracking. This key is saved only in your personal metadata.",
     "settings_openai_placeholder": "OpenAI API Key (sk-...)",
     "settings_openai_save": "Save Key",
-    "settings_avatar_btn_text": "Upload Avatar Pattern",
+    "settings_avatar_btn_text": "Change Avatar",
     "freq_Monthly": "Monthly",
     "freq_Weekly": "Weekly",
     "freq_Yearly": "Yearly",
@@ -116,5 +116,12 @@
     "budget_manage_header": "Manage Budgets",
     "budget_btn_save": "Save Budgets",
     "budget_msg_updated": "✅ Budgets Updated",
-    "chat_sidebar_title": "AI Smart Assistant"
+    "chat_sidebar_title": "AI Smart Assistant",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "thinking": "Thinking...",
+    "completed": "Completed",
+    "nav_floating_home": "Home",
+    "nav_floating_chat": "AI Chat",
+    "nav_floating_settings": "Settings"
 }

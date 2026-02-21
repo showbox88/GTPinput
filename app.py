@@ -37,18 +37,29 @@ if not st.session_state["session"]:
     else:
         st.session_state["session"] = None
 
-# 4. Login Form (If not logged in)
+# 4. Initialize i18n before rendering Login UI to support localization
+# Fallback to 'zh' if not determined yet
+try:
+    # If user is logged in, use their preference. If not, default to 'zh'.
+    user_lang = "zh"
+    if "user" in st.session_state and st.session_state["user"]:
+        user_lang = st.session_state["user"].user_metadata.get("language", "zh")
+    i18n.init_i18n(user_lang)
+except Exception:
+    i18n.init_i18n("zh")
+
+# 5. Login Form (If not logged in)
 if not st.session_state.get("session"):
-    st.title("🔐 GTPinput 登录")
+    st.title(f"🔐 {i18n._('nav_floating_home')} - GTPinput")
     
-    tab_login, tab_signup = st.tabs(["登录 (Login)", "注册 (Sign Up)"])
+    tab_login, tab_signup = st.tabs([f"{i18n._('settings_logout').split(' ')[1]} (Login)", "注册 (Sign Up)"])
     
     with tab_login:
         with st.form("login_form"):
-            email = st.text_input("邮箱 (Email)", key="login_email")
+            email = st.text_input(i18n._("settings_email"), key="login_email")
             password = st.text_input("密码 (Password)", type="password", key="login_password")
             remember = st.checkbox("保持登录 (Remember Me)", value=True)
-            submitted = st.form_submit_button("登录", type="primary", width="stretch")
+            submitted = st.form_submit_button(i18n._("settings_logout").split(" ")[1], type="primary", width="stretch")
         
         if submitted:
             try:
@@ -76,9 +87,10 @@ if not st.session_state.get("session"):
     
     st.stop()
 
-# 5. Initialize i18n before rendering UI
-user_lang = st.session_state["user"].user_metadata.get("language", "zh")
-i18n.init_i18n(user_lang)
+# 6. Re-Initialize i18n with user specific language if just logged in
+if "user" in st.session_state and st.session_state["user"]:
+    user_lang = st.session_state["user"].user_metadata.get("language", "zh")
+    i18n.init_i18n(user_lang)
 
-# 6. Render UI (V2 Only)
+# 7. Render UI (V2 Only)
 ui_v2.render(supabase)

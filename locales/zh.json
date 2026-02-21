@@ -18,7 +18,7 @@
     "settings_currency_title": "💱 本地货币",
     "settings_currency_caption": "选择您记账时默认使用的货币符号。",
     "settings_language_title": "🌐 界面语言",
-    "settings_language_caption": "Choose your preferred language for this system.",
+    "settings_language_caption": "选择您在此系统中偏好的显示语言。",
     "settings_save_btn": "保存偏好设置",
     "settings_save_success": "🎉 偏好设置已成功保存！",
     "settings_logout": "🚪 注销账号",
@@ -105,7 +105,7 @@
     "settings_openai_caption": "填入您自己的 OpenAI API Key 以启用智能对话和自动记账功能。此 Key 仅保存在您的个人元数据中。",
     "settings_openai_placeholder": "OpenAI API Key (sk-...)",
     "settings_openai_save": "保存 Key",
-    "settings_avatar_btn_text": "上传头像图案",
+    "settings_avatar_btn_text": "更换头像",
     "freq_Monthly": "按月",
     "freq_Weekly": "按周",
     "freq_Yearly": "按年",
@@ -116,5 +116,12 @@
     "budget_manage_header": "管理预算",
     "budget_btn_save": "保存预算",
     "budget_msg_updated": "✅ 预算已更新",
-    "chat_sidebar_title": "智能记账小助手"
+    "chat_sidebar_title": "智能记账小助手",
+    "today": "今天",
+    "yesterday": "昨天",
+    "thinking": "思考中...",
+    "completed": "已完成",
+    "nav_floating_home": "首页",
+    "nav_floating_chat": "AI助手",
+    "nav_floating_settings": "设置"
 }

@@ -805,8 +805,8 @@ def render_desktop_dashboard(df, services, supabase, is_mobile=False):
             d_str = pd.to_datetime(row["日期"]).strftime("%Y-%m-%d")
             
             # Determine Group Header
-            if d_str == today_str: group_name = "Today"
-            elif d_str == yesterday_str: group_name = "Yesterday"
+            if d_str == today_str: group_name = _("today")
+            elif d_str == yesterday_str: group_name = _("yesterday")
             else: group_name = pd.to_datetime(d_str).strftime("%A, %B %d")
             
             if group_name != current_group:
@@ -1134,7 +1134,7 @@ def render_chat(df, services, supabase, user, is_mobile=False):
         with chat_container:
              with st.chat_message("assistant", avatar="https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput"):
                  ph = st.empty()
-                 ph.write("Thinking...")
+                 ph.write(_("thinking"))
                  
                  # Fetch Context for AI
                  budgets = services.get_budgets(supabase)
@@ -1143,7 +1143,7 @@ def render_chat(df, services, supabase, user, is_mobile=False):
                  user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
                  
                  result = expense_chat.process_user_message(prompt, df, budgets, subs, user_currency=user_currency)
-                 reply = "Completed."
+                 reply = _("completed")
                  
                  intent = result.get("type", "chat")
                  
@@ -1360,26 +1360,26 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
 
 def render_settings(supabase, user, is_mobile=False):
     if is_mobile:
-        st.markdown("""
+        st.markdown(f"""
         <style>
             /* Mobile Settings Polish */
             /* Left-align specific sections based on the request */
-            h2 { font-size: 1.4rem !important; margin-bottom: 5px !important; text-align: left !important; color: #eee; }
-            [data-testid="stCaptionContainer"] p { font-size: 0.85rem !important; color: #aaa !important; text-align: left !important; margin-bottom: 16px !important; line-height: 1.4; }
-            h3 { font-size: 1.15rem !important; margin-top: 10px !important; text-align: left !important; }
+            h2 {{ font-size: 1.4rem !important; margin-bottom: 5px !important; text-align: left !important; color: #eee; }}
+            [data-testid="stCaptionContainer"] p {{ font-size: 0.85rem !important; color: #aaa !important; text-align: left !important; margin-bottom: 16px !important; line-height: 1.4; }}
+            h3 {{ font-size: 1.15rem !important; margin-top: 10px !important; text-align: left !important; }}
             
             /* Compact Info Cards */
-            div[data-testid="stVerticalBlockBorderWrapper"] {
+            div[data-testid="stVerticalBlockBorderWrapper"] {{
                 border: 1px solid rgba(255,255,255,0.05) !important;
                 background: #151515 !important;
                 border-radius: 20px !important;
                 padding: 16px !important;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
                 margin-bottom: 10px;
-            }
+            }}
             
             /* Customizing the logout button to look destructive/red */
-            button[kind="secondary"] { 
+            button[kind="secondary"] {{ 
                 border: 1px solid rgba(255,59,48,0.4) !important; 
                 background: rgba(255,59,48,0.1) !important; 
                 color: #ff4b4b !important; 
@@ -1388,27 +1388,27 @@ def render_settings(supabase, user, is_mobile=False):
                 padding: 24px 0 !important;
                 font-size: 1.1rem !important;
                 box-shadow: 0 4px 10px rgba(255,59,48,0.1);
-            }
-            button[kind="secondary"]:hover {
+            }}
+            button[kind="secondary"]:hover {{
                 background: rgba(255,59,48,0.2) !important; 
-            }
+            }}
             
             /* Styling "Browse files" Button to look like a Folder Upload */
-            [data-testid="stFileUploader"] section {
+            [data-testid="stFileUploader"] section {{
                 display: flex;
                 flex-direction: row;
                 align-items: center;
                 gap: 12px;
-            }
+            }}
             
             /* Insert folder icon as a flex item BEFORE the button */
-            [data-testid="stFileUploader"] section::before {
+            [data-testid="stFileUploader"] section::before {{
                 content: "📁";
                 font-size: 1.8rem;
                 display: block;
-            }
+            }}
             
-            [data-testid="stFileUploader"] button {
+            [data-testid="stFileUploader"] button {{
                 background: linear-gradient(135deg, #f2c94c 0%, #f2994a 100%) !important;
                 color: #222 !important;
                 border: none !important;
@@ -1417,53 +1417,53 @@ def render_settings(supabase, user, is_mobile=False):
                 padding: 8px 16px !important;
                 box-shadow: 0 4px 10px rgba(242, 169, 74, 0.3) !important;
                 margin: 0 !important;
-            }
+            }}
             
-            [data-testid="stFileUploader"] button * {
+            [data-testid="stFileUploader"] button * {{
                  display: none !important; /* Hide default icon and text spans inside the button */
-            }
+            }}
             
-            [data-testid="stFileUploader"] button::before {
+            [data-testid="stFileUploader"] button::before {{
                 content: "{_('settings_avatar_btn_text')}";
                 font-size: 0.95rem; /* Restore custom text size */
                 visibility: visible !important; 
                 display: block !important;
-            }
+            }}
             
             /* Softer divider */
-            hr { margin-top: 2rem !important; margin-bottom: 2rem !important; border-color: rgba(255,255,255,0.1) !important; }
+            hr {{ margin-top: 2rem !important; margin-bottom: 2rem !important; border-color: rgba(255,255,255,0.1) !important; }}
             
             /* Global Uploader Translation (Forcefully overrides internal labels) */
-            [data-testid="stFileUploader"] label {
+            [data-testid="stFileUploader"] label {{
                 visibility: hidden !important;
                 height: 0 !important;
                 margin: 0 !important;
-            }
-            [data-testid="stFileUploader"] section > div:first-child > span {
+            }}
+            [data-testid="stFileUploader"] section > div:first-child > span {{
                 visibility: hidden !important;
                 position: relative;
-            }
-            [data-testid="stFileUploader"] section > div:first-child > span::before {
+            }}
+            [data-testid="stFileUploader"] section > div:first-child > span::before {{
                 content: "{_('uploader_drag_drop')}";
                 visibility: visible !important;
                 position: absolute;
                 left: 0; top: 0;
                 width: 300px;
                 color: #aaa;
-            }
-            /* Desktop Button (only if not mobile specific pattern) */
-            [data-testid="stFileUploader"] button span {
-                display: none !important;
-            }
-            [data-testid="stFileUploader"] button::after {
+            }}
+            [data-testid="stFileUploader"] button::after {{
                 content: "{_('uploader_browse')}";
-                visibility: visible !important;
-                display: block !important;
-            }
+                display: none !important; /* Completely hide the after element if using before for button text */
+            }}
+
+            /* Direct target for the span containing 'Browse files' */
+            [data-testid="stFileUploader"] button span {{
+                display: none !important;
+            }}
             
             /* Adjust uploader elements */
-            [data-testid="stFileUploader"] { margin-top: -10px; padding-left: 10px; }
-            [data-testid="stSelectbox"] { margin-top: -10px; }
+            [data-testid="stFileUploader"] {{ margin-top: -10px; padding-left: 10px; }}
+            [data-testid="stSelectbox"] {{ margin-top: -10px; }}
         </style>
         """, unsafe_allow_html=True)
     else:
@@ -1861,15 +1861,15 @@ def render_mobile_floating_bar():
             <div class="mobile-float-bar">
                 <div class="float-btn {is_chat}" onclick="window.mobileNavClick('chat')">
                     <div class="icon">🤖</div>
-                    <div class="label">AI助手</div>
+                    <div class="label">{_('nav_floating_chat')}</div>
                 </div>
                 <div class="float-btn {is_home}" onclick="window.mobileNavClick('home')">
                     <div class="icon">🏠</div>
-                    <div class="label">首页</div>
+                    <div class="label">{_('nav_floating_home')}</div>
                 </div>
                 <div class="float-btn {is_settings}" onclick="window.mobileNavClick('settings')">
                     <div class="icon">⚙️</div>
-                    <div class="label">设置</div>
+                    <div class="label">{_('nav_floating_settings')}</div>
                 </div>
             </div>
         `;
@@ -1941,11 +1941,11 @@ def render_mobile_dashboard(df, services, supabase, user):
     render_unified_kpi_card(df, services, supabase)
     
     # 2. Category Pie Chart (Analysis)
-    st.subheader("📊 分类占比")
+    st.subheader(f"📊 {_('tab_category_ratio')}")
     if not df.empty and "分类" in df.columns:
          icon_map = {"餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"}
          df_pie = df.copy()
-         df_pie["IconLabel"] = df_pie["分类"].apply(lambda x: f"{icon_map.get(x, '💰')} {x}")
+         df_pie["IconLabel"] = df_pie["分类"].apply(lambda x: f"{icon_map.get(x, '💰')} {_(f'cat_{x}')}")
          
          user = st.session_state.get("user")
          user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
@@ -1956,17 +1956,17 @@ def render_mobile_dashboard(df, services, supabase, user):
              textinfo='percent+label', 
              textposition='inside', 
              textfont_color="white",
-             hovertemplate="%{label}<br>有效金额: " + user_currency + "%{value:,.2f}<extra></extra>"
+             hovertemplate="%{label}<br>" + _("col_amount") + ": " + user_currency + "%{value:,.2f}<extra></extra>"
          )
          fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=0, b=0, l=0, r=0), showlegend=False, height=260)
          st.plotly_chart(fig, use_container_width=True, config={"staticPlot": True})
 
     # 3. Budget Cards
-    st.subheader("💰 预算详情")
+    st.subheader(f"💰 {_('tab_budget_breakdown')}")
     render_budget_cards(df, services, supabase, is_mobile=True)
 
     # 4. Trend Chart
-    st.subheader("📉 支出趋势")
+    st.subheader(f"📉 {_('kpi_trend')}")
     tz = pytz.timezone("Asia/Shanghai")
     this_month = pd.Timestamp.now(tz=tz).strftime("%Y-%m")
     if "月(yyyy-mm)" in df.columns:
@@ -1976,7 +1976,7 @@ def render_mobile_dashboard(df, services, supabase, user):
         daily_trend = df[df["月(yyyy-mm)"] == this_month].groupby("日期")["有效金额"].sum().reset_index()
         if not daily_trend.empty:
             fig = px.area(daily_trend, x="日期", y="有效金额", title="", color_discrete_sequence=["#56CCF2"])
-            fig.update_traces(hovertemplate="%{x}<br>有效金额: " + user_currency + "%{y:,.2f}<extra></extra>")
+            fig.update_traces(hovertemplate="%{x}<br>" + _("col_amount") + ": " + user_currency + "%{y:,.2f}<extra></extra>")
             fig.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", 
                 margin=dict(l=0, r=0, t=0, b=0),
@@ -1994,13 +1994,13 @@ def render_mobile_dashboard(df, services, supabase, user):
         render_heatmap(supabase, is_mobile=True)
 
     # 6. Recent Records
-    st.subheader("📝 最近记录")
+    st.subheader(f"📝 {_('dash_recent_records')}")
     if not df.empty:
         df_sorted = df.sort_values(by=["date", "id"], ascending=[False, False]).head(5)
         user = st.session_state.get("user")
         user_currency = user.user_metadata.get("currency_symbol", "$").split(" ")[0] if user else "$"
         
-        for _, row in df_sorted.iterrows():
+        for idx, row in df_sorted.iterrows():
             cat = row["分类"]
             icon_map = {"餐饮": "🍔", "日用品": "🛒", "交通": "🚗", "服饰": "👔", "医疗": "💊", "娱乐": "🎮", "居住": "🏠", "其他": "📦"}
             icon = icon_map.get(cat, "💰")
