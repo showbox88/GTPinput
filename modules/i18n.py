@@ -11,12 +11,39 @@ def get_locale_dict(lang_code):
     if os.path.exists(file_path):
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                if isinstance(data, dict):
+                    return data
         except Exception as e:
+            # Log error but don't crash
             print(f"Error loading locale {lang_code}: {e}")
     
-    # Fallback to empty if not found
+    # Fallback to empty if not found or invalid
     return {}
+
+def get_available_languages():
+    """Scan the locales directory and return a dict of {code: display_name}."""
+    languages = {}
+    if not os.path.exists(LOCALES_DIR):
+        return {"zh": "简体中文"} # Safe fallback
+        
+    for filename in os.listdir(LOCALES_DIR):
+        if filename.endswith(".json"):
+            lang_code = filename[:-5]
+            try:
+                # We only need the display name, read carefully
+                with open(os.path.join(LOCALES_DIR, filename), 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    display_name = data.get("_lang_display_name", lang_code)
+                    languages[lang_code] = display_name
+            except Exception:
+                continue
+    
+    # Ensure we have at least Chinese and English as fallbacks if something goes wrong
+    if not languages:
+        return {"zh": "简体中文", "en": "English"}
+        
+    return languages
 
 def init_i18n(user_lang_code="zh"):
     """

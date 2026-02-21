@@ -1301,7 +1301,7 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
     # Add New Budget (Popover)
     with st.popover(_("sub_add_new"), use_container_width=True):
         with st.form("v2_add_budget_page"):
-            b_cat = st.selectbox(_("col_category"), CATEGORIES, key="v2_b_cat_page")
+            b_cat = st.selectbox(_("col_category"), CATEGORIES, key="v2_b_cat_page", format_func=lambda x: _(f"cat_{x}"))
             b_amt = st.number_input(f"{_('col_amount')} ({user_currency})", min_value=0, step=100, key="v2_b_amt_page")
             if st.form_submit_button(_("sub_btn_add"), type="primary", use_container_width=True):
                 icon_map = {"餐饮":"🍔", "交通":"🚗", "日用品":"🛒", "服饰":"👔", "娱乐":"🎮", "医疗":"💊", "居住":"🏠", "其他":"📦"}
@@ -1585,26 +1585,27 @@ def render_settings(supabase, user, is_mobile=False):
 
     st.subheader(_("settings_language_title"))
     st.caption(_("settings_language_caption"))
-    lang_options = {"zh": "中文 (Simplified Chinese)", "en": "English"}
+    
+    # Dynamically fetch available languages
+    lang_options = i18n.get_available_languages()
     current_lang_code = user.user_metadata.get("language", "zh")
     
-    # Safe fallback if somehow corrupted
+    # Safe fallback if current language file is missing
     if current_lang_code not in lang_options:
         current_lang_code = "zh"
-        
-    current_lang_display = lang_options[current_lang_code]
     
+    sorted_codes = sorted(lang_options.keys(), key=lambda x: (x != "zh", x != "en", x))
+    current_index = sorted_codes.index(current_lang_code)
+
     with st.form("language_form"):
-        selected_lang_display = st.selectbox(
+        selected_code = st.selectbox(
             _("settings_lang_label"), 
-            options=list(lang_options.values()), 
-            index=list(lang_options.values()).index(current_lang_display)
+            options=sorted_codes, 
+            index=current_index,
+            format_func=lambda x: lang_options.get(x, x)
         )
         if st.form_submit_button(_("settings_save_btn"), type="primary", use_container_width=is_mobile):
             try:
-                # Reverse lookup the code
-                selected_code = [k for k, v in lang_options.items() if v == selected_lang_display][0]
-                
                 # Only update if changed
                 if selected_code != current_lang_code:
                     supabase.auth.update_user({"data": {"language": selected_code}})
