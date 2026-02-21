@@ -1083,6 +1083,12 @@ def render_chat(df, services, supabase, user, is_mobile=False):
                 left: 50% !important;
                 transform: translateX(-50%) !important;
             }
+            /* Reduce chat input height by 6px by targeting its internal container */
+            [data-testid="stChatInput"] textarea {
+                min-height: 38px !important; /* Default was likely 44 */
+                padding-top: 8px !important;
+                padding-bottom: 8px !important;
+            }
         </style>
         """, unsafe_allow_html=True)
 
@@ -1454,7 +1460,8 @@ def render_settings(supabase, user, is_mobile=False):
     
     st.subheader("🎨 个性化专属头像 (Avatar)")
     st.caption("更改左侧导航栏的专属头像。每位用户均可拥有独立的个人头像，不再与他人共享。")
-    uploaded_logo = st.file_uploader("上传您的专属 Logo (Upload Logo)", type=["png", "jpg", "jpeg"], key="v2_user_logo_uploader")
+    uploader_key = f"v2_user_logo_uploader_{st.session_state.get('avatar_upload_count', 0)}"
+    uploaded_logo = st.file_uploader("上传您的专属 Logo (Upload Logo)", type=["png", "jpg", "jpeg"], key=uploader_key)
     if uploaded_logo:
          if uploaded_logo.size > 20 * 1024 * 1024:
              st.error("❌ 文件太大啦！请上传小于 20MB 的图片。")
@@ -1483,9 +1490,10 @@ def render_settings(supabase, user, is_mobile=False):
                  st.success("✅ 您的专属个人 Logo 已成功上传至云端并生效!")
                  import time
                  time.sleep(1)
-                 # Clear the uploader so the folder CSS button reappears instead of the 'Remove file' default UI
-                 if "v2_user_logo_uploader" in st.session_state:
-                     del st.session_state["v2_user_logo_uploader"]
+                 
+                 # Dynamically change the uploader key to force Streamlit to completely unmount and reset it
+                 st.session_state['avatar_upload_count'] = st.session_state.get('avatar_upload_count', 0) + 1
+                 
                  st.rerun()
              except Exception as e:
                  st.error(f"上传失败: {e}")
