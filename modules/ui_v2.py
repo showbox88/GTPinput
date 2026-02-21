@@ -1066,19 +1066,26 @@ def render_transactions(df, services, supabase, is_mobile=False):
 
 def render_chat(df, services, supabase, user, is_mobile=False):
     render_top_navigation(df, services, supabase, is_mobile=is_mobile)
-    st.header("AI 智能助手")
-    st.caption("告诉我你花了什么钱，或者问我财务问题。")
+    
+    if not is_mobile:
+        st.header("AI 智能助手")
+        st.caption("告诉我你花了什么钱，或者问我财务问题。")
+    else:
+        # Minimal header for mobile to save vertical space
+        st.markdown("<div style='margin-top: -10px; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem;'>🤖 AI 助手</div>", unsafe_allow_html=True)
 
     if is_mobile:
         st.markdown("""
         <style>
             [data-testid="stChatInput"] {
-                bottom: 30px !important; /* Lifted by additional 10px */
+                bottom: 35px !important; /* Lifted by an additional 5px */
             }
         </style>
         """, unsafe_allow_html=True)
 
-    chat_container = st.container(height=500, border=True)
+    # Reduce container height on mobile so the top message is perfectly visible in the viewport
+    c_height = 380 if is_mobile else 500
+    chat_container = st.container(height=c_height, border=True)
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": "👋 准备好记账了吗？"}]
         
