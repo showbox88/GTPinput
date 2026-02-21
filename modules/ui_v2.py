@@ -135,6 +135,11 @@ def inject_custom_css():
             border-radius: 16px;
             padding: 20px;
         }
+        /* Hide Streamlit default UI elements (Manage App, Footer, etc) */
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        .stAppDeployButton {display:none;}
+        [data-testid="stToolbar"] {display: none;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -1335,12 +1340,103 @@ def render_budgets(df, services, supabase, user, is_mobile=False):
             st.rerun()
 
 def render_settings(supabase, user, is_mobile=False):
+    if is_mobile:
+        st.markdown("""
+        <style>
+            /* Mobile Settings Polish */
+            /* Left-align specific sections based on the request */
+            h2 { font-size: 1.4rem !important; margin-bottom: 5px !important; text-align: left !important; color: #eee; }
+            [data-testid="stCaptionContainer"] p { font-size: 0.85rem !important; color: #aaa !important; text-align: left !important; margin-bottom: 16px !important; line-height: 1.4; }
+            h3 { font-size: 1.15rem !important; margin-top: 10px !important; text-align: left !important; }
+            
+            /* Compact Info Cards */
+            div[data-testid="stVerticalBlockBorderWrapper"] {
+                border: 1px solid rgba(255,255,255,0.05) !important;
+                background: #151515 !important;
+                border-radius: 20px !important;
+                padding: 16px !important;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.4) !important;
+                margin-bottom: 10px;
+            }
+            
+            /* Customizing the logout button to look destructive/red */
+            button[kind="secondary"] { 
+                border: 1px solid rgba(255,59,48,0.4) !important; 
+                background: rgba(255,59,48,0.1) !important; 
+                color: #ff4b4b !important; 
+                border-radius: 16px !important;
+                font-weight: 700 !important;
+                padding: 24px 0 !important;
+                font-size: 1.1rem !important;
+                box-shadow: 0 4px 10px rgba(255,59,48,0.1);
+            }
+            button[kind="secondary"]:hover {
+                background: rgba(255,59,48,0.2) !important; 
+            }
+            
+            /* Styling "Browse files" Button to look like a Folder Upload */
+            [data-testid="stFileUploader"] section {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 12px;
+            }
+            
+            /* Insert folder icon as a flex item BEFORE the button */
+            [data-testid="stFileUploader"] section::before {
+                content: "📁";
+                font-size: 1.8rem;
+                display: block;
+            }
+            
+            [data-testid="stFileUploader"] button {
+                background: linear-gradient(135deg, #f2c94c 0%, #f2994a 100%) !important;
+                color: #222 !important;
+                border: none !important;
+                border-radius: 12px !important;
+                font-weight: 700 !important;
+                padding: 8px 16px !important;
+                box-shadow: 0 4px 10px rgba(242, 169, 74, 0.3) !important;
+                margin: 0 !important;
+            }
+            
+            [data-testid="stFileUploader"] button * {
+                 display: none !important; /* Hide default icon and text spans inside the button */
+            }
+            
+            [data-testid="stFileUploader"] button::before {
+                content: "上传头像图案";
+                font-size: 0.95rem; /* Restore custom text size */
+                visibility: visible !important; 
+                display: block !important;
+            }
+            
+            /* Softer divider */
+            hr { margin-top: 2rem !important; margin-bottom: 2rem !important; border-color: rgba(255,255,255,0.1) !important; }
+            
+            /* Adjust uploader elements */
+            [data-testid="stFileUploader"] { margin-top: -10px; padding-left: 10px; }
+            [data-testid="stSelectbox"] { margin-top: -10px; }
+        </style>
+        """, unsafe_allow_html=True)
+
     st.header("⚙️ 账号与个人设置 (Settings)")
     st.caption("个性化您的控制台体验。")
     
     with st.container(border=True):
-        st.write(f"**Email:** {user.email}")
-        st.write(f"**User ID:** {user.id}")
+        # Create columns to display Avatar (Left) and Details (Right)
+        col1, col2 = st.columns([1, 4])
+        
+        with col1:
+            # Determine Avatar URL (custom or fallback)
+            avatar_url = user.user_metadata.get("avatar_url")
+            if not avatar_url:
+                avatar_url = "https://api.dicebear.com/9.x/bottts/svg?seed=FinanceHelper&backgroundColor=00a6ff"
+            st.image(avatar_url, width=60)
+            
+        with col2:
+            st.write(f"**Email:** {user.email}")
+            st.write(f"**User ID:** {user.id}")
         
     st.divider()
     
@@ -1348,8 +1444,8 @@ def render_settings(supabase, user, is_mobile=False):
     st.caption("更改左侧导航栏的专属头像。每位用户均可拥有独立的个人头像，不再与他人共享。")
     uploaded_logo = st.file_uploader("上传您的专属 Logo (Upload Logo)", type=["png", "jpg", "jpeg"], key="v2_user_logo_uploader")
     if uploaded_logo:
-         if uploaded_logo.size > 2 * 1024 * 1024:
-             st.error("❌ 文件太大啦！请上传小于 2MB 的图片。")
+         if uploaded_logo.size > 20 * 1024 * 1024:
+             st.error("❌ 文件太大啦！请上传小于 20MB 的图片。")
          else:
              try:
                  # Upload to Supabase Storage
@@ -1409,27 +1505,27 @@ def render_settings(supabase, user, is_mobile=False):
             except Exception as e:
                 st.error(f"保存失败: {e}")
 
-    st.divider()
-    
-    st.subheader("🔑 OpenAI API Key (选填)")
-    st.caption("填入您自己的 OpenAI API Key 以启用智能对话和自动记账功能。此 Key 仅保存在您的个人元数据中。")
-    
-    current_key = user.user_metadata.get("openai_api_key", "")
-    with st.form("api_key_form"):
-        new_key = st.text_input("OpenAI API Key (sk-...)", value=current_key, type="password")
-        if st.form_submit_button("保存 Key (Save)", type="primary"):
-            try:
-                # Update user metadata
-                supabase.auth.update_user({"data": {"openai_api_key": new_key}})
-                st.success("✅ OpenAI API Key 已安全保存至您的账号!")
-                res = supabase.auth.get_user()
-                if res and res.user:
-                    st.session_state["user"] = res.user
-                import time
-                time.sleep(1)
-                st.rerun()
-            except Exception as e:
-                st.error(f"保存失败: {e}")
+    if not is_mobile:
+        st.divider()
+        st.subheader("🔑 OpenAI API Key (选填)")
+        st.caption("填入您自己的 OpenAI API Key 以启用智能对话和自动记账功能。此 Key 仅保存在您的个人元数据中。")
+        
+        current_key = user.user_metadata.get("openai_api_key", "")
+        with st.form("api_key_form"):
+            new_key = st.text_input("OpenAI API Key (sk-...)", value=current_key, type="password")
+            if st.form_submit_button("保存 Key (Save)", type="primary"):
+                try:
+                    # Update user metadata
+                    supabase.auth.update_user({"data": {"openai_api_key": new_key}})
+                    st.success("✅ OpenAI API Key 已安全保存至您的账号!")
+                    res = supabase.auth.get_user()
+                    if res and res.user:
+                        st.session_state["user"] = res.user
+                    import time
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"保存失败: {e}")
 
     st.divider()
     if st.button("🚪 注销退出 (Logout)", type="secondary", use_container_width=True):
@@ -1523,23 +1619,31 @@ def render_mobile_floating_bar():
     # Current Page
     current_page = st.session_state.get("v2_page", "Dashboard")
     
-    # Logic
-    if current_page == "Dashboard":
-        target_page = "Smart Chat"
-        icon = "🤖"
-        btn_text = "AI 助手"
-    else:
-        target_page = "Dashboard"
-        icon = "🏠"
-        btn_text = "返回首页"
-
-    # Hidden Streamlit Button (Workhorse)
-    # We use a wrapper to help locate it, though we mainly rely on text content
+    # Hidden Streamlit Buttons (Workhorses)
+    # We use a wrapper to help locate them
     st.markdown('<div class="nav-trigger-wrapper">', unsafe_allow_html=True)
-    if st.button("Toggle_Nav_Hidden", key=f"btn_hidden_nav_{target_page}"):
-        st.session_state["v2_page"] = target_page
-        st.rerun()
+    
+    # Create a hidden button for each navigation option
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("Toggle_Nav_Dashboard", key="btn_hidden_nav_dashboard"):
+            st.session_state["v2_page"] = "Dashboard"
+            st.rerun()
+    with col2:
+        if st.button("Toggle_Nav_SmartChat", key="btn_hidden_nav_smartchat"):
+            st.session_state["v2_page"] = "Smart Chat"
+            st.rerun()
+    with col3:
+        if st.button("Toggle_Nav_Settings", key="btn_hidden_nav_settings"):
+            st.session_state["v2_page"] = "Settings"
+            st.rerun()
+            
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # Determine active states for styling
+    is_home = "active" if current_page == "Dashboard" else ""
+    is_chat = "active" if current_page == "Smart Chat" else ""
+    is_settings = "active" if current_page == "Settings" else ""
 
     # Floating Bar using components.html (Iframe) to inject into PARENT DOM
     # This ensures position:fixed works relative to the viewport, not the iframe
@@ -1549,12 +1653,15 @@ def render_mobile_floating_bar():
     <script>
         const parentDoc = window.parent.document;
         
-        // 1. Hide the Toggle Button (Repeatedly to fight rerenders)
+        // 1. Hide the Toggle Buttons (Repeatedly to fight rerenders)
         function hideTrigger() {{
             const buttons = parentDoc.getElementsByTagName('button');
             for (let i = 0; i < buttons.length; i++) {{
-                if (buttons[i].innerText.includes("Toggle_Nav_Hidden")) {{
-                    buttons[i].style.position = "fixed";
+                const text = buttons[i].innerText;
+                if (text.includes("Toggle_Nav_Dashboard") || 
+                    text.includes("Toggle_Nav_SmartChat") || 
+                    text.includes("Toggle_Nav_Settings")) {{
+                    buttons[i].style.position = "absolute";
                     buttons[i].style.top = "-9999px";
                     buttons[i].style.opacity = "0";
                     buttons[i].style.pointerEvents = "none";
@@ -1563,13 +1670,16 @@ def render_mobile_floating_bar():
             }}
         }}
         
-        // 2. The click handler (Attached to window of iframe, called by injected element? No)
-        // The injected element is in parentDoc. Its onclick="window.triggerNavClick()" looks for function in PARENT window.
-        // So we must attach the function to PARENT window.
-        parentDoc.defaultView.mobileNavClick = function() {{
+        // 2. The click handler 
+        parentDoc.defaultView.mobileNavClick = function(targetNav) {{
             const buttons = parentDoc.getElementsByTagName('button');
+            let targetText = "";
+            if (targetNav === 'home') targetText = "Toggle_Nav_Dashboard";
+            if (targetNav === 'chat') targetText = "Toggle_Nav_SmartChat";
+            if (targetNav === 'settings') targetText = "Toggle_Nav_Settings";
+            
             for (let i = 0; i < buttons.length; i++) {{
-                if (buttons[i].innerText.includes("Toggle_Nav_Hidden")) {{
+                if (buttons[i].innerText.includes(targetText)) {{
                     buttons[i].click();
                     return;
                 }}
@@ -1587,36 +1697,60 @@ def render_mobile_floating_bar():
         }}
         
         // 4. Update Content (Re-render safe)
-        // We use a button-like div to avoid default button form submission issues just in case
         barContainer.innerHTML = `
             <style>
                 #my-mobile-float-bar-overlay .mobile-float-bar {{
-                    position: fixed; bottom: 0; left: 0; width: 100%; height: 80px;
-                    background: transparent;
-                    border-top: none;
-                    display: flex; align-items: center; justify-content: flex-end;
-                    padding-right: 24px; z-index: 999999;
-                    box-shadow: none;
+                    position: fixed; bottom: 36px; /* Lifted by 20px */
+                    left: 50%; transform: translateX(-50%);
+                    width: 90%; max-width: 400px; height: 50px; /* Thinner */
+                    background: rgba(30, 30, 30, 0.85); /* Slightly transparent dark background */
+                    backdrop-filter: blur(12px);
+                    -webkit-backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 25px; /* Pill shape adapted to thinner height */
+                    display: flex; align-items: center; justify-content: space-around;
+                    padding: 0 10px; z-index: 999999;
+                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
                     box-sizing: border-box;
-                    font-family: sans-serif;
-                    pointer-events: none; /* Let clicks pass through empty areas */
+                    font-family: 'Inter', sans-serif;
+                    pointer-events: auto; /* Catch clicks */
                 }}
                 #my-mobile-float-bar-overlay .float-btn {{
-                    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-                    color: white; border: none; padding: 12px 24px;
-                    border-radius: 30px; font-weight: 600; font-size: 16px;
-                    display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
-                    box-shadow: 0 4px 15px rgba(30, 60, 114, 0.4);
-                    transition: transform 0.1s ease;
-                    user-select: none;
-                    width: 140px; /* Fixed width for consistency */
-                    pointer-events: auto; /* Re-enable clicks on button */
+                    color: #888;
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    cursor: pointer; transition: all 0.2s ease;
+                    user-select: none; width: 33%; height: 100%;
                 }}
-                #my-mobile-float-bar-overlay .float-btn:active {{ transform: scale(0.95); opacity: 0.9; }}
+                #my-mobile-float-bar-overlay .float-btn .icon {{
+                    font-size: 24px; margin-bottom: 0; /* Larger icon, no bottom margin */
+                    transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                }}
+                #my-mobile-float-bar-overlay .float-btn .label {{
+                    display: none; /* Hide labels */
+                }}
+                #my-mobile-float-bar-overlay .float-btn.active {{
+                    color: #56CCF2; /* Theme Blue */
+                }}
+                #my-mobile-float-bar-overlay .float-btn.active .icon {{
+                    transform: scale(1.15); /* Scale instead of translateY */
+                    filter: drop-shadow(0px 2px 4px rgba(86,204,242,0.4));
+                }}
+                #my-mobile-float-bar-overlay .float-btn:active .icon {{ 
+                    transform: scale(0.9); 
+                }}
             </style>
             <div class="mobile-float-bar">
-                <div class="float-btn { 'home' if target_page == 'Dashboard' else '' }" onclick="window.mobileNavClick()">
-                    <span>{icon}</span> {btn_text}
+                <div class="float-btn {is_chat}" onclick="window.mobileNavClick('chat')">
+                    <div class="icon">🤖</div>
+                    <div class="label">AI助手</div>
+                </div>
+                <div class="float-btn {is_home}" onclick="window.mobileNavClick('home')">
+                    <div class="icon">🏠</div>
+                    <div class="label">首页</div>
+                </div>
+                <div class="float-btn {is_settings}" onclick="window.mobileNavClick('settings')">
+                    <div class="icon">⚙️</div>
+                    <div class="label">设置</div>
                 </div>
             </div>
         `;
@@ -1676,6 +1810,10 @@ def render_mobile_dashboard(df, services, supabase, user):
     if st.session_state.get("v2_page") == "Smart Chat":
         # Floating Bar handles navigation back
         render_chat(df, services, supabase, user, is_mobile=True)
+        render_mobile_floating_bar()
+        return
+    elif st.session_state.get("v2_page") == "Settings":
+        render_settings(supabase, user, is_mobile=True)
         render_mobile_floating_bar()
         return
 
