@@ -1073,7 +1073,7 @@ def render_chat(df, services, supabase, user, is_mobile=False):
         st.markdown("""
         <style>
             [data-testid="stChatInput"] {
-                bottom: 20px !important;
+                bottom: 30px !important; /* Lifted by additional 10px */
             }
         </style>
         """, unsafe_allow_html=True)
@@ -1700,7 +1700,7 @@ def render_mobile_floating_bar():
         barContainer.innerHTML = `
             <style>
                 #my-mobile-float-bar-overlay .mobile-float-bar {{
-                    position: fixed; bottom: 36px; /* Lifted by 20px */
+                    position: fixed; bottom: 41px; /* Lifted by additional 5px */
                     left: 50%; transform: translateX(-50%);
                     width: 90%; max-width: 400px; height: 50px; /* Thinner */
                     background: rgba(30, 30, 30, 0.85); /* Slightly transparent dark background */

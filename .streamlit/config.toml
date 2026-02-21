@@ -9,3 +9,6 @@ font = "sans serif"
 enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 20
+
+[client]
+toolbarMode = "viewer"
