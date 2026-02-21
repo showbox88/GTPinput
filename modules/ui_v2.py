@@ -1078,14 +1078,19 @@ def render_chat(df, services, supabase, user, is_mobile=False):
         st.markdown("""
         <style>
             [data-testid="stChatInput"] {
-                bottom: 35px !important; /* Lifted by an additional 5px */
+                bottom: 37px !important; /* Lifted by an additional 2px */
+                width: calc(100% - 8px) !important; /* make it narrower, centering it */
+                left: 50% !important;
+                transform: translateX(-50%) !important;
             }
         </style>
         """, unsafe_allow_html=True)
 
-    # Reduce container height on mobile so the top message is perfectly visible in the viewport
-    c_height = 380 if is_mobile else 500
-    chat_container = st.container(height=c_height, border=True)
+    # Allow natural page scrolling on mobile so the first message natively appears at the top
+    if is_mobile:
+        chat_container = st.container(border=True)
+    else:
+        chat_container = st.container(height=500, border=True)
     if "messages" not in st.session_state:
         st.session_state.messages = [{"role": "assistant", "content": "👋 准备好记账了吗？"}]
         
@@ -1478,6 +1483,9 @@ def render_settings(supabase, user, is_mobile=False):
                  st.success("✅ 您的专属个人 Logo 已成功上传至云端并生效!")
                  import time
                  time.sleep(1)
+                 # Clear the uploader so the folder CSS button reappears instead of the 'Remove file' default UI
+                 if "v2_user_logo_uploader" in st.session_state:
+                     del st.session_state["v2_user_logo_uploader"]
                  st.rerun()
              except Exception as e:
                  st.error(f"上传失败: {e}")
