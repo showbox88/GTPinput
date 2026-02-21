@@ -3,6 +3,7 @@ from supabase import create_client
 import modules.auth as auth
 
 import modules.ui_v2 as ui_v2
+import modules.i18n as i18n
 
 # 1. Page Config (Must be first)
 st.set_page_config(
@@ -75,5 +76,9 @@ if not st.session_state.get("session"):
     
     st.stop()
 
-# 5. Render UI (V2 Only)
+# 5. Initialize i18n before rendering UI
+user_lang = st.session_state["user"].user_metadata.get("language", "zh")
+i18n.init_i18n(user_lang)
+
+# 6. Render UI (V2 Only)
 ui_v2.render(supabase)

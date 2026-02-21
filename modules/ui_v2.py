@@ -1068,11 +1068,11 @@ def render_chat(df, services, supabase, user, is_mobile=False):
     render_top_navigation(df, services, supabase, is_mobile=is_mobile)
     
     if not is_mobile:
-        st.header("AI 智能助手")
-        st.caption("告诉我你花了什么钱，或者问我财务问题。")
+        st.header(_("chat_header"))
+        st.caption(_("chat_caption"))
     else:
         # Minimal header for mobile to save vertical space
-        st.markdown("<div style='margin-top: -10px; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem;'>🤖 AI 助手</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='margin-top: -10px; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem;'>🤖 {_('chat_header')}</div>", unsafe_allow_html=True)
 
     if is_mobile:
         st.markdown("""
@@ -1106,7 +1106,7 @@ def render_chat(df, services, supabase, user, is_mobile=False):
     else:
         chat_container = st.container(height=500, border=True)
     if "messages" not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "👋 准备好记账了吗？"}]
+        st.session_state.messages = [{"role": "assistant", "content": _("chat_welcome")}]
         
     user_avatar = user.user_metadata.get("avatar_url") if user.user_metadata.get("avatar_url") else "https://api.dicebear.com/9.x/adventurer-neutral/svg?seed=user123"
 
@@ -1116,7 +1116,7 @@ def render_chat(df, services, supabase, user, is_mobile=False):
              avatar = "https://api.dicebear.com/9.x/bottts-neutral/svg?seed=gptinput" if role == "assistant" else user_avatar
              st.chat_message(role, avatar=avatar).write(msg["content"])
 
-    if prompt := st.chat_input("例如：打车 50，超市买菜 120..."):
+    if prompt := st.chat_input(_("chat_placeholder")):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with chat_container:
             st.chat_message("user", avatar=user_avatar).write(prompt)
@@ -1151,10 +1151,10 @@ def render_chat(df, services, supabase, user, is_mobile=False):
                          names.append(r.get("item"))
                      if payloads:
                          services.add_expenses_batch(supabase, payloads)
-                         reply = f"✅ 已记录: {', '.join(names)}"
+                         reply = f"✅ {_('chat_success_start')}: {', '.join(names)}"
                          st.session_state["data_changed"] = True
                      else:
-                         reply = "未识别到内容"
+                         reply = _("chat_error_extract")
 
                  # 2. CHAT
                  elif intent == "chat":
@@ -1165,10 +1165,10 @@ def render_chat(df, services, supabase, user, is_mobile=False):
                      eid = result.get("id")
                      if eid:
                          services.delete_expense(supabase, eid)
-                         reply = result.get("reply", "已删除")
+                         reply = result.get("reply", _("chat_success_end"))
                          st.session_state["data_changed"] = True
                      else:
-                         reply = "未找到对应记录"
+                         reply = _("chat_error_extract")
 
                  # 4. UPDATE EXPENSE
                  elif intent == "update":
@@ -1446,8 +1446,8 @@ def render_settings(supabase, user, is_mobile=False):
         </style>
         """, unsafe_allow_html=True)
 
-    st.header("⚙️ 账号与个人设置 (Settings)")
-    st.caption("个性化您的控制台体验。")
+    st.header(_("settings_header"))
+    st.caption(_("settings_caption"))
     
     with st.container(border=True):
         # Create columns to display Avatar (Left) and Details (Right)
@@ -1461,18 +1461,18 @@ def render_settings(supabase, user, is_mobile=False):
             st.image(avatar_url, width=60)
             
         with col2:
-            st.write(f"**Email:** {user.email}")
-            st.write(f"**User ID:** {user.id}")
+            st.write(f"**{_('settings_email')}** {user.email}")
+            st.write(f"**{_('settings_userid')}** {user.id}")
         
     st.divider()
     
-    st.subheader("🎨 个性化专属头像 (Avatar)")
-    st.caption("更改左侧导航栏的专属头像。每位用户均可拥有独立的个人头像，不再与他人共享。")
+    st.subheader(_("settings_avatar_title"))
+    st.caption(_("settings_avatar_caption"))
     uploader_key = f"v2_user_logo_uploader_{st.session_state.get('avatar_upload_count', 0)}"
-    uploaded_logo = st.file_uploader("上传您的专属 Logo (Upload Logo)", type=["png", "jpg", "jpeg"], key=uploader_key)
+    uploaded_logo = st.file_uploader(_("settings_avatar_upload"), type=["png", "jpg", "jpeg"], key=uploader_key)
     if uploaded_logo:
          if uploaded_logo.size > 20 * 1024 * 1024:
-             st.error("❌ 文件太大啦！请上传小于 20MB 的图片。")
+             st.error(_("settings_avatar_error_size"))
          else:
              try:
                  # Upload to Supabase Storage
@@ -1496,7 +1496,7 @@ def render_settings(supabase, user, is_mobile=False):
                  if auth_res and auth_res.user:
                      st.session_state["user"] = auth_res.user
                      
-                 st.success("✅ 您的专属个人 Logo 已成功上传至云端并生效!")
+                 st.success(_("settings_avatar_success"))
                  # Removed time.sleep to avoid any possible time module scope issues
                  
                  # Dynamically change the uploader key to force Streamlit to completely unmount and reset it
@@ -1504,12 +1504,12 @@ def render_settings(supabase, user, is_mobile=False):
                  
                  st.rerun()
              except Exception as e:
-                 st.error(f"上传失败: {e}")
+                 st.error(_("settings_avatar_error_upload", error=str(e)))
          
     st.divider()
     
-    st.subheader("💱 本地货币 (Currency)")
-    st.caption("选择您记账时默认使用的货币符号。")
+    st.subheader(_("settings_currency_title"))
+    st.caption(_("settings_currency_caption"))
     cu_options = ["¥ (CNY人民币)", "$ (USD美元)", "€ (EUR欧元)", "£ (GBP英镑)", "₩ (KRW韩元)", "¥ (JPY日元)", "฿ (THB泰铢)"]
     
     current_currency = user.user_metadata.get("currency_symbol", "$ (USD美元)")
@@ -1538,6 +1538,50 @@ def render_settings(supabase, user, is_mobile=False):
 
     if not is_mobile:
         st.divider()
+
+    st.subheader(_("settings_language_title"))
+    st.caption(_("settings_language_caption"))
+    lang_options = {"zh": "中文 (Simplified Chinese)", "en": "English"}
+    current_lang_code = user.user_metadata.get("language", "zh")
+    
+    # Safe fallback if somehow corrupted
+    if current_lang_code not in lang_options:
+        current_lang_code = "zh"
+        
+    current_lang_display = lang_options[current_lang_code]
+    
+    with st.form("language_form"):
+        selected_lang_display = st.selectbox(
+            "Language / 语言", 
+            options=list(lang_options.values()), 
+            index=list(lang_options.values()).index(current_lang_display)
+        )
+        if st.form_submit_button(_("settings_save_btn"), type="primary", use_container_width=is_mobile):
+            try:
+                # Reverse lookup the code
+                selected_code = [k for k, v in lang_options.items() if v == selected_lang_display][0]
+                
+                # Only update if changed
+                if selected_code != current_lang_code:
+                    supabase.auth.update_user({"data": {"language": selected_code}})
+                    res = supabase.auth.get_user()
+                    if res and res.user:
+                        st.session_state["user"] = res.user
+                    
+                    # Force load the new dictionary immediately to show success message correctly
+                    i18n.init_i18n(selected_code)
+                    
+                    st.success(_("settings_save_success"))
+                    import time
+                    time.sleep(0.5)
+                    st.rerun()
+                else:
+                    st.info("Language unchanged.")
+            except Exception as e:
+                st.error(f"Error saving language: {e}")
+
+    if not is_mobile:
+        st.divider()
         st.subheader("🔑 OpenAI API Key (选填)")
         st.caption("填入您自己的 OpenAI API Key 以启用智能对话和自动记账功能。此 Key 仅保存在您的个人元数据中。")
         
@@ -1559,7 +1603,7 @@ def render_settings(supabase, user, is_mobile=False):
                     st.error(f"保存失败: {e}")
 
     st.divider()
-    if st.button("🚪 注销退出 (Logout)", type="secondary", use_container_width=True):
+    if st.button(_("settings_logout"), type="secondary", use_container_width=True):
         supabase.auth.sign_out()
         st.session_state["session"] = None
         if "messages" in st.session_state:
