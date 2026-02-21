@@ -1486,6 +1486,7 @@ def render_settings(supabase, user, is_mobile=False):
                      {"upsert": "true", "content-type": content_type}
                  )
                  
+                 import time
                  # Get Public URL and update metadata with cache-busting timestamp
                  base_public_url = supabase.storage.from_("avatars").get_public_url(file_path)
                  public_url = f"{base_public_url}?t={int(time.time())}"
@@ -1497,7 +1498,6 @@ def render_settings(supabase, user, is_mobile=False):
                      st.session_state["user"] = auth_res.user
                      
                  st.success("✅ 您的专属个人 Logo 已成功上传至云端并生效!")
-                 import time
                  time.sleep(1)
                  
                  # Dynamically change the uploader key to force Streamlit to completely unmount and reset it
